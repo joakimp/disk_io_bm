@@ -17,10 +17,10 @@ TMPFILE=tmp_test
 TESTNAME=disk_test
 
 # Store results according to this
-BASEDIR=$(pwd)
-OFNAME1=${BASEDIR}/bm_${BLOCKSIZE1}.txt
-OFNAME2=${BASEDIR}/bm_${BLOCKSIZE2}.txt
-OFNAME3=${BASEDIR}/bm_${BLOCKSIZE3}.txt
+BASEDIR="$(pwd)"
+OFNAME1="${BASEDIR}/bm_${BLOCKSIZE1}.txt"
+OFNAME2="${BASEDIR}/bm_${BLOCKSIZE2}.txt"
+OFNAME3="${BASEDIR}/bm_${BLOCKSIZE3}.txt"
 
 
 # Start with blocksize 4 KiB
