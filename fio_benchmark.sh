@@ -37,10 +37,10 @@ do_disk_test () {
 	fi	
 	echo ""  >> "${OFNAME}" # Print newline
 		
-	if [ "${TESTTYPE}" = "read" ] || [ d"${TESTTYPE}" = "write" ]; then
-		echo "This is sequential ${TESTTYPE}, blocksize = ${BLOCKSIZE}" >> "${OFNAME}"		
+	if [ "${TESTTYPE}" = "read" ] || [ "${TESTTYPE}" = "write" ]; then
+		echo "This is sequential ${TESTTYPE}, block size = ${BLOCKSIZE}" >> "${OFNAME}"		
 	else
-		echo "This is ${TESTTYPE}, blocksize = ${BLOCKSIZE}" >> "${OFNAME}"
+		echo "This is ${TESTTYPE}, block size = ${BLOCKSIZE}" >> "${OFNAME}"
 	fi
 	
 	fio --filename=${TMPFILE} --sync=1 --rw=$TESTTYPE --bs=${BLOCKSIZE} --numjobs=1 --iodepth=4 --group_reporting --name=${TESTNAME} --filesize=${FILESIZE} --runtime=${RUNTIME} >> "${OFNAME}" && rm ${TMPFILE}
