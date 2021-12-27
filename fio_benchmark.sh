@@ -8,9 +8,7 @@
 # Parameters to use
 # FILESIZE=1G   # For testing only
 FILESIZE=10G
-BLOCKSIZE1=4k
-BLOCKSIZE2=64k
-BLOCKSIZE3=1M
+
 # RUNTIME=15    # For testing only
 RUNTIME=300
 TMPFILE=tmp_test
@@ -18,73 +16,52 @@ TESTNAME=disk_test
 
 # Store results according to this
 BASEDIR="$(pwd)"
-OFNAME1="${BASEDIR}/bm_${BLOCKSIZE1}.txt"
-OFNAME2="${BASEDIR}/bm_${BLOCKSIZE2}.txt"
-OFNAME3="${BASEDIR}/bm_${BLOCKSIZE3}.txt"
+OFNAME1="${BASEDIR}/bm_4k.txt"
+OFNAME2="${BASEDIR}/bm_64k.txt"
+OFNAME3="${BASEDIR}/bm_1M.txt"
 
 
-# Start with blocksize 4 KiB
-# Random read
-echo '==========================================================' > "${OFNAME1}"
-echo "Random read, Blocksize ${BLOCKSIZE1}" >> "${OFNAME1}"
-fio --filename=${TMPFILE} --sync=1 --rw=randread --bs=${BLOCKSIZE1} --numjobs=1 --iodepth=4 --group_reporting --name=${TESTNAME} --filesize=${FILESIZE} --runtime=${RUNTIME} >> "${OFNAME1}" && rm ${TMPFILE}
-
-# Random write
-echo '\n==========================================================' >> "${OFNAME1}"
-echo "Random write, Blocksize ${BLOCKSIZE1}" >> "${OFNAME1}"
-fio --filename=${TMPFILE} --sync=1 --rw=randwrite --bs=${BLOCKSIZE1} --numjobs=1 --iodepth=4 --group_reporting --name=${TESTNAME} --filesize=${FILESIZE} --runtime=${RUNTIME} >> "${OFNAME1}" && rm ${TMPFILE}
-
-# Sequential read
-echo '\n==========================================================' >> "${OFNAME1}"
-echo "Sequential read, Blocksize ${BLOCKSIZE1}" >> "${OFNAME1}"
-fio --filename=${TMPFILE} --sync=1 --rw=read --bs=${BLOCKSIZE1} --numjobs=1 --iodepth=4 --group_reporting --name=${TESTNAME} --filesize=${FILESIZE} --runtime=${RUNTIME} >> "${OFNAME1}" && rm ${TMPFILE}
-
-# Sequential write
-echo '\n==========================================================' >> "${OFNAME1}"
-echo "Sequential write, Blocksize ${BLOCKSIZE1}" >> "${OFNAME1}"
-fio --filename=${TMPFILE} --sync=1 --rw=write --bs=${BLOCKSIZE1} --numjobs=1 --iodepth=4 --group_reporting --name=${TESTNAME} --filesize=${FILESIZE} --runtime=${RUNTIME} >> "${OFNAME1}" && rm ${TMPFILE}
-
-
-# Then blocksize 64 KiB
-# Random read
-echo '==========================================================' > "${OFNAME2}"
-echo "Random read, Blocksize ${BLOCKSIZE2}" >> "${OFNAME2}"
-fio --filename=${TMPFILE} --sync=1 --rw=randread --bs=${BLOCKSIZE2} --numjobs=1 --iodepth=4 --group_reporting --name=${TESTNAME} --filesize=${FILESIZE} --runtime=${RUNTIME} >> "${OFNAME2}" && rm ${TMPFILE}
-
-# Random write
-echo '\n==========================================================' >> "${OFNAME2}"
-echo "Random write, Blocksize ${BLOCKSIZE2}" >> "${OFNAME2}"
-fio --filename=${TMPFILE} --sync=1 --rw=randwrite --bs=${BLOCKSIZE2} --numjobs=1 --iodepth=4 --group_reporting --name=${TESTNAME} --filesize=${FILESIZE} --runtime=${RUNTIME} >> "${OFNAME2}" && rm ${TMPFILE}
-
-# Sequential read
-echo '\n==========================================================' >> "${OFNAME2}"
-echo "Sequential read, Blocksize ${BLOCKSIZE2}" >> "${OFNAME2}"
-fio --filename=${TMPFILE} --sync=1 --rw=read --bs=${BLOCKSIZE2} --numjobs=1 --iodepth=4 --group_reporting --name=${TESTNAME} --filesize=${FILESIZE} --runtime=${RUNTIME} >> "${OFNAME2}" && rm ${TMPFILE}
-
-# Sequential write
-echo '\n==========================================================' >> "${OFNAME2}"
-echo "Sequential write, Blocksize ${BLOCKSIZE2}" >> "${OFNAME2}"
-fio --filename=${TMPFILE} --sync=1 --rw=write --bs=${BLOCKSIZE2} --numjobs=1 --iodepth=4 --group_reporting --name=${TESTNAME} --filesize=${FILESIZE} --runtime=${RUNTIME} >> "${OFNAME2}" && rm ${TMPFILE}
+do_disk_test () { 
+	# Expected parameters: block size, outfile, type of test, append mode (or not)
+	# All other used variables are globally known.
+	# Local names to use for clarity ($0 refers to the function name), derivied from argument list
+	local BLOCKSIZE="$1"
+	local OFNAME="$2"
+	local TESTTYPE="$3"
+	local APPEND="$4"
+	
+	if [ "$APPEND" = "true" ]; then
+		echo "==========================================================" >> "${OFNAME}"
+	else
+		echo "==========================================================" > "${OFNAME}"
+	fi	
+	echo ""  >> "${OFNAME}" # Print newline
+		
+	if [ "${TESTTYPE}" = "read" ] || [ d"${TESTTYPE}" = "write" ]; then
+		echo "This is sequential ${TESTTYPE}, blocksize = ${BLOCKSIZE}" >> "${OFNAME}"		
+	else
+		echo "This is ${TESTTYPE}, blocksize = ${BLOCKSIZE}" >> "${OFNAME}"
+	fi
+	
+	fio --filename=${TMPFILE} --sync=1 --rw=$TESTTYPE --bs=${BLOCKSIZE} --numjobs=1 --iodepth=4 --group_reporting --name=${TESTNAME} --filesize=${FILESIZE} --runtime=${RUNTIME} >> "${OFNAME}" && rm ${TMPFILE}
+	
+}
 
 
-# Finally blocksize 1 MiB
-# Random read
-echo '==========================================================' > "${OFNAME3}"
-echo "Random read, Blocksize ${BLOCKSIZE3}" >> "${OFNAME3}"
-fio --filename=${TMPFILE} --sync=1 --rw=randread --bs=${BLOCKSIZE3} --numjobs=1 --iodepth=4 --group_reporting --name=${TESTNAME} --filesize=${FILESIZE} --runtime=${RUNTIME} >> "${OFNAME3}" && rm ${TMPFILE}
+# Do the test for block sizes 4 KiB, 64 KiB, and 1 MiB, respectively.
+do_disk_test "4k" "${OFNAME1}" "randread" false
+do_disk_test "4k" "${OFNAME1}" "randwrite" true
+do_disk_test "4k" "${OFNAME1}" "read" true
+do_disk_test "4k" "${OFNAME1}" "write" true
 
-# Random write
-echo '\n==========================================================' >> "${OFNAME3}"
-echo "Random write, Blocksize ${BLOCKSIZE3}" >> "${OFNAME3}"
-fio --filename=${TMPFILE} --sync=1 --rw=randwrite --bs=${BLOCKSIZE3} --numjobs=1 --iodepth=4 --group_reporting --name=${TESTNAME} --filesize=${FILESIZE} --runtime=${RUNTIME} >> "${OFNAME3}" && rm ${TMPFILE}
+do_disk_test "64k" "${OFNAME2}" "randread" false
+do_disk_test "64k" "${OFNAME2}" "randwrite" true
+do_disk_test "64k" "${OFNAME2}" "read" true
+do_disk_test "64k" "${OFNAME2}" "write" true
 
-# Sequential read
-echo '\n==========================================================' >> "${OFNAME3}"
-echo "Sequential read, Blocksize ${BLOCKSIZE3}" >> "${OFNAME3}"
-fio --filename=${TMPFILE} --sync=1 --rw=read --bs=${BLOCKSIZE3} --numjobs=1 --iodepth=4 --group_reporting --name=${TESTNAME} --filesize=${FILESIZE} --runtime=${RUNTIME} >> "${OFNAME3}" && rm ${TMPFILE}
+do_disk_test "1M" "${OFNAME3}" "randread" false
+do_disk_test "1M" "${OFNAME3}" "randwrite" true
+do_disk_test "1M" "${OFNAME3}" "read" true
+do_disk_test "1M" "${OFNAME3}" "write" true
 
-# Sequential write
-echo '\n==========================================================' >> "${OFNAME3}"
-echo "Sequential write, Blocksize ${BLOCKSIZE3}" >> "${OFNAME3}"
-fio --filename=${TMPFILE} --sync=1 --rw=write --bs=${BLOCKSIZE3} --numjobs=1 --iodepth=4 --group_reporting --name=${TESTNAME} --filesize=${FILESIZE} --runtime=${RUNTIME} >> "${OFNAME3}" && rm ${TMPFILE}
 
