@@ -34,7 +34,7 @@ Run the script with optional flags:
 - `bash fio_benchmark.sh --concurrency`: Enable high concurrency on select tests.
 - `bash fio_benchmark.sh --full --ssd --concurrency`: Combine for comprehensive SSD testing.
 
-**Note**: On macOS, ensure `fio` is installed (e.g., via Homebrew). Latency tracking (`--lat`) may not be supported in older fio versions and will be automatically disabled with a warning. Summary parsing is optimized for macOS fio output; use `--test` for quick checks.
+**Note**: On macOS, ensure `fio` is installed (e.g., via Homebrew). Summary parsing is optimized for macOS fio output; use `--test` for quick checks.
 
 The script displays dynamic progress updates during execution, including an ASCII progress bar, current test name, elapsed time (HH:MM:SS), and estimated remaining time. Updates occur every ~10 seconds.
 

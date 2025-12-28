@@ -42,17 +42,6 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-# Check if fio supports --lat option
-LAT_SUPPORTED=false
-if command -v fio >/dev/null 2>&1; then
-    if fio --help 2>/dev/null | grep -q "lat="; then
-        LAT_SUPPORTED=true
-    fi
-fi
-if [ "$LAT_SUPPORTED" = false ]; then
-    echo "Warning: fio does not support --lat option (latency tracking disabled)" >&2
-fi
-
 # Test mode settings
 if [ "$TEST" = true ]; then
     RUNTIME=15
@@ -94,15 +83,14 @@ else
 fi
 
 do_disk_test () {
-	# Expected parameters: block size, outfile, type of test, append mode, latency mode, numjobs, iodepth
+	# Expected parameters: block size, outfile, type of test, append mode, numjobs, iodepth
 	# All other used variables are globally known.
 	local BLOCKSIZE="$1"
 	local OFNAME="$2"
 	local TESTTYPE="$3"
 	local APPEND="$4"
-	local LATENCY="$5"
-	local JOBS="$6"
-	local IODEPTH="$7"
+	local JOBS="$5"
+	local IODEPTH="$6"
 
 	current_test=$((current_test + 1))
 
@@ -130,13 +118,7 @@ do_disk_test () {
 
 	echo "This is ${rw_part}, block size = ${BLOCKSIZE}" >> "${OFNAME}"
 
-	# Build lat option
-	local lat_opt=""
-	if [ "$LATENCY" = "true" ] && [ "$LAT_SUPPORTED" = "true" ]; then
-		lat_opt="--lat=1"
-	fi
-
-	fio --filename=${TMPFILE} --sync=1 --rw=$rw_part $extra --bs=${BLOCKSIZE} --numjobs=${JOBS} --iodepth=${IODEPTH} --group_reporting --name=${TESTNAME} --filesize=${FILESIZE} --runtime=${RUNTIME} --direct=1 $lat_opt >> "${OFNAME}" &
+	fio --filename=${TMPFILE} --sync=1 --rw=$rw_part $extra --bs=${BLOCKSIZE} --numjobs=${JOBS} --iodepth=${IODEPTH} --group_reporting --name=${TESTNAME} --filesize=${FILESIZE} --runtime=${RUNTIME} --direct=1 >> "${OFNAME}" &
 pid=$!
 while kill -0 $pid 2>/dev/null; do
     elapsed=$(($(date +%s) - start_time))
