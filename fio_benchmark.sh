@@ -21,20 +21,40 @@ OFNAME2="${BASEDIR}/bm_64k.txt"
 OFNAME3="${BASEDIR}/bm_1M.txt"
 OFNAME4="${BASEDIR}/bm_512k.txt"
 
-# Flag parsing
+# Flag parsing (support both short and long options)
 SSD=false
 HDD=false
 CONCURRENCY=false
 FULL=false
-while getopts "shcf" opt; do
-    case $opt in
-        s) SSD=true ;;
-        h) HDD=true ;;
-        c) CONCURRENCY=true ;;
-        f) FULL=true ;;
+TEST=false
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -s|--ssd) SSD=true ;;
+        -h|--hdd) HDD=true ;;
+        -c|--concurrency) CONCURRENCY=true ;;
+        -f|--full) FULL=true ;;
+        -t|--test) TEST=true ;;
+        *) echo "Unknown option: $1" >&2; exit 1 ;;
     esac
+    shift
 done
-shift $((OPTIND-1))
+
+# Check if fio supports --lat option
+LAT_SUPPORTED=false
+if command -v fio >/dev/null 2>&1; then
+    if fio --help 2>/dev/null | grep -q "lat="; then
+        LAT_SUPPORTED=true
+    fi
+fi
+if [ "$LAT_SUPPORTED" = false ]; then
+    echo "Warning: fio does not support --lat option (latency tracking disabled)" >&2
+fi
+
+# Test mode settings
+if [ "$TEST" = true ]; then
+    RUNTIME=15
+    FILESIZE=100M
+fi
 
 # Set concurrency defaults
 DEFAULT_JOBS=1
@@ -88,7 +108,7 @@ do_disk_test () {
 
 	# Build lat option
 	local lat_opt=""
-	if [ "$LATENCY" = "true" ]; then
+	if [ "$LATENCY" = "true" ] && [ "$LAT_SUPPORTED" = "true" ]; then
 		lat_opt="--lat=1"
 	fi
 
@@ -131,13 +151,28 @@ summarize_results() {
             local cpu="N/A"
 
             if [ "$test_type" != "trim" ]; then
-                read_iops=$(grep -A 30 "This is $test_type, block size = $block" "$file" | grep "read:" | grep -o "IOPS=[0-9]*" | head -1 | cut -d= -f2)
-                write_iops=$(grep -A 30 "This is $test_type, block size = $block" "$file" | grep "write:" | grep -o "IOPS=[0-9]*" | head -1 | cut -d= -f2)
-                read_bw=$(grep -A 30 "This is $test_type, block size = $block" "$file" | grep "read:" | grep -o "BW=[^)]*" | head -1 | cut -d= -f2)
-                write_bw=$(grep -A 30 "This is $test_type, block size = $block" "$file" | grep "write:" | grep -o "BW=[^)]*" | head -1 | cut -d= -f2)
-                read_lat=$(grep -A 30 "This is $test_type, block size = $block" "$file" | grep "read:" -A 10 | grep "avg=" | grep -o "avg=[0-9.]*" | head -1 | cut -d= -f2)
-                write_lat=$(grep -A 30 "This is $test_type, block size = $block" "$file" | grep "write:" -A 10 | grep "avg=" | grep -o "avg=[0-9.]*" | head -1 | cut -d= -f2)
-                cpu=$(grep -A 30 "This is $test_type, block size = $block" "$file" | grep "cpu" -A 1 | grep "usr=" | head -1 | sed 's/.*usr=\([0-9.]*%\), sys=\([0-9.]*%\).*/usr=\1 sys=\2/')
+                # Extract IOPS
+                local iops=$(grep -A 40 "This is $test_type, block size = $block" "$file" | grep "IOPS=" | head -1 | cut -d= -f2)
+                if [[ "$test_type" == randread ]] || [[ "$test_type" == read ]]; then
+                    read_iops=$iops
+                elif [[ "$test_type" == randwrite ]] || [[ "$test_type" == write ]]; then
+                    write_iops=$iops
+                elif [[ "$test_type" == randrw ]]; then
+                    # For mixed, assume read IOPS first, but complex, set to N/A for now
+                    read_iops="N/A"
+                    write_iops="N/A"
+                fi
+
+                # Extract BW
+                read_bw=$(grep -A 40 "This is $test_type, block size = $block" "$file" | grep "read:" | sed 's/.*BW=\([^)]*\).*/\1/' | head -1 | cut -d' ' -f1)
+                write_bw=$(grep -A 40 "This is $test_type, block size = $block" "$file" | grep "write:" | sed 's/.*BW=\([^)]*\).*/\1/' | head -1 | cut -d' ' -f1)
+
+                # Extract Lat
+                read_lat=$(grep -A 40 "This is $test_type, block size = $block" "$file" | grep "read:" | sed 's/.*avg=\([0-9.]*\).*/\1/' | head -1)
+                write_lat=$(grep -A 40 "This is $test_type, block size = $block" "$file" | grep "write:" | sed 's/.*avg=\([0-9.]*\).*/\1/' | head -1)
+
+                # Extract CPU
+                cpu=$(grep -A 40 "This is $test_type, block size = $block" "$file" | grep "cpu" -A 1 | grep "usr=" | head -1 | sed 's/.*usr=\([0-9.]*%\), sys=\([0-9.]*%\).*/usr=\1 sys=\2/')
             fi
 
             [ -z "$read_iops" ] && read_iops="N/A"
@@ -192,42 +227,49 @@ summarize_results() {
     echo "Summary saved to $summary_file" >&2
 }
 
-# Do the test for block sizes 4 KiB, 64 KiB, and 1 MiB, respectively.
-do_disk_test "4k" "${OFNAME1}" "randread" false true $DEFAULT_JOBS $DEFAULT_IODEPTH
-do_disk_test "4k" "${OFNAME1}" "randwrite" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
-do_disk_test "4k" "${OFNAME1}" "read" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
-do_disk_test "4k" "${OFNAME1}" "write" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
+if [ "$TEST" = false ]; then
+    # Do the test for block sizes 4 KiB, 64 KiB, and 1 MiB, respectively.
+    do_disk_test "4k" "${OFNAME1}" "randread" false true $DEFAULT_JOBS $DEFAULT_IODEPTH
+    do_disk_test "4k" "${OFNAME1}" "randwrite" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
+    do_disk_test "4k" "${OFNAME1}" "read" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
+    do_disk_test "4k" "${OFNAME1}" "write" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
 
-do_disk_test "64k" "${OFNAME2}" "randread" false false $CONC_JOBS $CONC_IODEPTH
-do_disk_test "64k" "${OFNAME2}" "randwrite" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
-do_disk_test "64k" "${OFNAME2}" "read" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
-do_disk_test "64k" "${OFNAME2}" "write" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
+    do_disk_test "64k" "${OFNAME2}" "randread" false false $CONC_JOBS $CONC_IODEPTH
+    do_disk_test "64k" "${OFNAME2}" "randwrite" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
+    do_disk_test "64k" "${OFNAME2}" "read" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
+    do_disk_test "64k" "${OFNAME2}" "write" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
 
-do_disk_test "1M" "${OFNAME3}" "randread" false false $DEFAULT_JOBS $DEFAULT_IODEPTH
-do_disk_test "1M" "${OFNAME3}" "randwrite" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
-do_disk_test "1M" "${OFNAME3}" "read" true true $DEFAULT_JOBS $DEFAULT_IODEPTH
-do_disk_test "1M" "${OFNAME3}" "write" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
+    do_disk_test "1M" "${OFNAME3}" "randread" false false $DEFAULT_JOBS $DEFAULT_IODEPTH
+    do_disk_test "1M" "${OFNAME3}" "randwrite" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
+    do_disk_test "1M" "${OFNAME3}" "read" true true $DEFAULT_JOBS $DEFAULT_IODEPTH
+    do_disk_test "1M" "${OFNAME3}" "write" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
 
-# Lean additional tests
-LEAN_RUNTIME=60
-if [ "$FULL" = true ]; then LEAN_RUNTIME=300; fi
+    # Lean additional tests
+    LEAN_RUNTIME=60
+    if [ "$FULL" = true ]; then LEAN_RUNTIME=300; fi
 
-# Mixed RandRW
-RUNTIME=$LEAN_RUNTIME
-do_disk_test "4k" "${BASEDIR}/bm_mixed.txt" "randrw:rwmixread=70" false false $DEFAULT_JOBS $DEFAULT_IODEPTH
+    # Mixed RandRW
+    RUNTIME=$LEAN_RUNTIME
+    do_disk_test "4k" "${BASEDIR}/bm_mixed.txt" "randrw:rwmixread=70" false false $DEFAULT_JOBS $DEFAULT_IODEPTH
 
-# Trim for SSD
-if [ "$SSD" = true ]; then
-    do_disk_test "4k" "${BASEDIR}/bm_trim.txt" "trim" false false $DEFAULT_JOBS $DEFAULT_IODEPTH
-fi
+    # Trim for SSD
+    if [ "$SSD" = true ]; then
+        do_disk_test "4k" "${BASEDIR}/bm_trim.txt" "trim" false false $DEFAULT_JOBS $DEFAULT_IODEPTH
+    fi
 
-# Full mode: additional 512k tests
-if [ "$FULL" = true ]; then
-    RUNTIME=300
-    do_disk_test "512k" "${OFNAME4}" "randread" false false $DEFAULT_JOBS $DEFAULT_IODEPTH
-    do_disk_test "512k" "${OFNAME4}" "randwrite" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
-    do_disk_test "512k" "${OFNAME4}" "read" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
-    do_disk_test "512k" "${OFNAME4}" "write" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
+    # Full mode: additional 512k tests
+    if [ "$FULL" = true ]; then
+        RUNTIME=300
+        do_disk_test "512k" "${OFNAME4}" "randread" false false $DEFAULT_JOBS $DEFAULT_IODEPTH
+        do_disk_test "512k" "${OFNAME4}" "randwrite" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
+        do_disk_test "512k" "${OFNAME4}" "read" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
+        do_disk_test "512k" "${OFNAME4}" "write" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
+    fi
+else
+    # Test mode: partial tests for quick validation
+    do_disk_test "4k" "${OFNAME1}" "randread" false true $DEFAULT_JOBS $DEFAULT_IODEPTH
+    do_disk_test "64k" "${OFNAME2}" "randwrite" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
+    do_disk_test "1M" "${OFNAME3}" "read" true true $DEFAULT_JOBS $DEFAULT_IODEPTH
 fi
 
 # Generate summary

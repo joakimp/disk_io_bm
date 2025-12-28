@@ -19,18 +19,22 @@ The script now includes additional lean tests for more comprehensive disk perfor
 
 ## Usage
 
-The script supports lean and full test modes:
+The script supports lean, full, and test modes:
 
 - **Lean Mode (Default)**: Runs the original tests with enhancements (direct I/O, latency, mixed RandRW, optional trim/concurrency). Lean tests use shorter runtimes (60s) for efficiency. Total runtime ~1-1.25 hours.
 - **Full Mode**: Adds comprehensive tests with full runtimes (300s for lean additions) and extra block sizes (512k). Total runtime ~2-3 hours.
+- **Test Mode**: Runs partial core tests (4k randread, 64k randwrite, 1M read) with 15s runtime for quick validation. Total runtime ~1 minute.
 
 Run the script with optional flags:
 
 - `bash fio_benchmark.sh`: Lean mode (HDD, no concurrency).
 - `bash fio_benchmark.sh --full`: Full mode with additional tests.
+- `bash fio_benchmark.sh --test`: Test mode (15s runtime, partial core tests for quick validation).
 - `bash fio_benchmark.sh --ssd`: Enable SSD-specific tests (e.g., trim).
 - `bash fio_benchmark.sh --concurrency`: Enable high concurrency on select tests.
 - `bash fio_benchmark.sh --full --ssd --concurrency`: Combine for comprehensive SSD testing.
+
+**Note**: On macOS, ensure `fio` is installed (e.g., via Homebrew). Latency tracking (`--lat`) may not be supported in older fio versions and will be automatically disabled with a warning. Summary parsing is optimized for macOS fio output; use `--test` for quick checks.
 
 Results are saved to bm_*.txt files.
 
