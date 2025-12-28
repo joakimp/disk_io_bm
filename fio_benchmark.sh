@@ -145,11 +145,7 @@ while kill -0 $pid 2>/dev/null; do
     progress=$((current_test * 20 / total_tests))
     bar=$(printf '%*s' "$progress" '' | tr ' ' '#'; printf '%*s' "$((20 - progress))" '' | tr ' ' ' ')
     msg="Progress: [$bar] $((current_test * 100 / total_tests))% | Running: $current_test_name | Elapsed: $(format_time $elapsed) | Remaining: ~$(format_time $remaining)"
-    if [ -t 2 ]; then
-        printf "\033[2K\r%-${width}s" "$msg" >&2
-    else
-        echo "$msg" >&2
-    fi
+    printf "\r%-${width}s" "$msg" >&2
     sleep 10
 done
 wait $pid
