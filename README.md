@@ -36,7 +36,9 @@ Run the script with optional flags:
 
 **Note**: On macOS, ensure `fio` is installed (e.g., via Homebrew). Latency tracking (`--lat`) may not be supported in older fio versions and will be automatically disabled with a warning. Summary parsing is optimized for macOS fio output; use `--test` for quick checks.
 
-The script displays dynamic progress updates during execution, including an ASCII progress bar, current test name, elapsed time (HH:MM:SS), and estimated remaining time. Updates occur every ~10 seconds; in compatible terminals, they overwrite the same line for a clean display, otherwise on new lines.
+The script displays dynamic progress updates during execution, including an ASCII progress bar, current test name, elapsed time (HH:MM:SS), and estimated remaining time. Updates occur every ~10 seconds.
+
+Note: In some terminals (e.g., iTerm2), intermediate progress updates may appear in the scrollback history after tests complete. This is expected behavior—the progress line is properly overwritten during execution and cleared when all tests finish.
 
 Results are saved to bm_*.txt files.
 
