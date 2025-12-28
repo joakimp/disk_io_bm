@@ -14,6 +14,9 @@ RUNTIME=300
 TMPFILE=tmp_test
 TESTNAME=disk_test
 
+# Clean previous output files
+rm -f "${BASEDIR}"/bm_*.txt "${BASEDIR}"/summary.txt
+
 # Store results according to this
 BASEDIR="$(pwd)"
 OFNAME1="${BASEDIR}/bm_4k.txt"
@@ -129,6 +132,8 @@ summarize_results() {
                 tests_present+=("${BASH_REMATCH[1]} ${BASH_REMATCH[2]}")
             fi
         done < "$file"
+        # Remove duplicates
+        tests_present=($(printf '%s\n' "${tests_present[@]}" | sort | uniq))
 
         for test in "${tests_present[@]}"; do
             local test_type=${test% *}
@@ -145,24 +150,31 @@ summarize_results() {
             if [ "$test_type" != "trim" ]; then
                 # Extract IOPS
                 local iops=$(grep -A 40 "This is $test_type, block size = $block" "$file" | grep "IOPS=" | head -1 | cut -d= -f2)
-                [ -z "$iops" ] && echo "Debug: No IOPS found for $test in $file" >&2
                 if [[ "$test_type" == randread ]] || [[ "$test_type" == read ]]; then
                     read_iops=$iops
+                    [ -z "$read_iops" ] && echo "Debug: No read IOPS found for $test in $file" >&2
                 elif [[ "$test_type" == randwrite ]] || [[ "$test_type" == write ]]; then
                     write_iops=$iops
+                    [ -z "$write_iops" ] && echo "Debug: No write IOPS found for $test in $file" >&2
                 fi
 
                 # Extract BW
-                read_bw=$(grep -A 40 "This is $test_type, block size = $block" "$file" | grep "read:" | sed 's/.*BW=\([^)]*\).*/\1/' | head -1 | cut -d' ' -f1)
-                [ -z "$read_bw" ] && echo "Debug: No read BW found for $test in $file" >&2
-                write_bw=$(grep -A 40 "This is $test_type, block size = $block" "$file" | grep "write:" | sed 's/.*BW=\([^)]*\).*/\1/' | head -1 | cut -d' ' -f1)
-                [ -z "$write_bw" ] && echo "Debug: No write BW found for $test in $file" >&2
+                if [[ "$test_type" == randread ]] || [[ "$test_type" == read ]]; then
+                    read_bw=$(grep -A 40 "This is $test_type, block size = $block" "$file" | grep "read:" | sed 's/.*BW=\([^)]*\).*/\1/' | head -1 | cut -d' ' -f1)
+                    [ -z "$read_bw" ] && echo "Debug: No read BW found for $test in $file" >&2
+                elif [[ "$test_type" == randwrite ]] || [[ "$test_type" == write ]]; then
+                    write_bw=$(grep -A 40 "This is $test_type, block size = $block" "$file" | grep "write:" | sed 's/.*BW=\([^)]*\).*/\1/' | head -1 | cut -d' ' -f1)
+                    [ -z "$write_bw" ] && echo "Debug: No write BW found for $test in $file" >&2
+                fi
 
                 # Extract Lat
-                read_lat=$(grep -A 40 "This is $test_type, block size = $block" "$file" | grep "read:" -A 20 | grep "clat" | sed 's/.*avg=\([0-9.]*\).*/\1/' | head -1)
-                [ -z "$read_lat" ] && echo "Debug: No read lat found for $test in $file" >&2
-                write_lat=$(grep -A 40 "This is $test_type, block size = $block" "$file" | grep "write:" -A 20 | grep "clat" | sed 's/.*avg=\([0-9.]*\).*/\1/' | head -1)
-                [ -z "$write_lat" ] && echo "Debug: No write lat found for $test in $file" >&2
+                if [[ "$test_type" == randread ]] || [[ "$test_type" == read ]]; then
+                    read_lat=$(grep -A 40 "This is $test_type, block size = $block" "$file" | grep "read:" -A 20 | grep "clat" | sed 's/.*avg=\([0-9.]*\).*/\1/' | head -1)
+                    [ -z "$read_lat" ] && echo "Debug: No read lat found for $test in $file" >&2
+                elif [[ "$test_type" == randwrite ]] || [[ "$test_type" == write ]]; then
+                    write_lat=$(grep -A 40 "This is $test_type, block size = $block" "$file" | grep "write:" -A 20 | grep "clat" | sed 's/.*avg=\([0-9.]*\).*/\1/' | head -1)
+                    [ -z "$write_lat" ] && echo "Debug: No write lat found for $test in $file" >&2
+                fi
 
                 # Extract CPU
                 cpu=$(grep -A 40 "This is $test_type, block size = $block" "$file" | grep "cpu" -A 1 | grep "usr=" | head -1 | sed 's/.*usr=\([0-9.]*%\), sys=\([0-9.]*%\).*/usr=\1 sys=\2/')
