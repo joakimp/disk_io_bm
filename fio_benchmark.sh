@@ -142,7 +142,7 @@ while kill -0 $pid 2>/dev/null; do
     if [ "$remaining" -lt 0 ]; then remaining=0; fi
     progress=$((current_test * 20 / total_tests))
     bar=$(printf '%*s' "$progress" '' | tr ' ' '#'; printf '%*s' "$((20 - progress))" '' | tr ' ' ' ')
-    echo -ne "Progress: [$bar] $((current_test * 100 / total_tests))% | Running: $current_test_name | Elapsed: $(format_time $elapsed) | Remaining: ~$(format_time $remaining)\r" >&2
+    echo -ne "\033[2K\rProgress: [$bar] $((current_test * 100 / total_tests))% | Running: $current_test_name | Elapsed: $(format_time $elapsed) | Remaining: ~$(format_time $remaining)" >&2
     sleep 10
 done
 wait $pid
