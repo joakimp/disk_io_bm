@@ -1,11 +1,11 @@
 
 # Benchmarking file I/O
 
-This script test disk i/o performance using the tool fio.
+This script benchmarks disk I/O performance using the fio tool, supporting various test modes and configurations.
 
 Details are discussed in a blog post: [ZFS performance tuning](https://martin.heiland.io/2018/02/23/zfs-tuning/index.html)
 
-In short, four tests are run for the block sizes {4k, 64k, 1M}. The four tests are random read, random write, sequential read, and sequential write.
+Originally, four tests are run for the block sizes {4k, 64k, 1M}: random read, random write, sequential read, and sequential write. The script has been enhanced with additional modes for comprehensive evaluation.
 
 ## Enhanced Features
 
@@ -44,10 +44,8 @@ After running tests, the script automatically generates a summary of core metric
 
 Example output:
 ```
-Test          IOPS Read  IOPS Write  BW Read    BW Write   Lat Avg Read (us)  Lat Avg Write (us)  CPU              Bar
-randread 4k   15000      N/A         58.5MB/s   N/A        50.0               N/A                 usr=10.0% sys=5.0%  ####################
-randwrite 4k  N/A        12000       N/A        46.7MB/s   N/A                70.0               usr=12.0% sys=6.0%  **********
+Test          IOPS Read  IOPS Write  BW Read    BW Write   Lat Avg Read (us)  Lat Avg Write (us)  CPU
+randread 4k   15000      N/A         58.5MB/s   N/A        50.0               N/A                 usr=10.0% sys=5.0%
+randwrite 64k N/A        12000       N/A        46.7MB/s   N/A                70.0               usr=12.0% sys=6.0%
 ...
 ```
-
-The "Bar" column shows simple ASCII art for relative IOPS comparison (##### for read, **** for write), scaled to the maximum across all tests.
