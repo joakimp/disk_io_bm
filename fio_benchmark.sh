@@ -134,6 +134,7 @@ summarize_results() {
         done < "$file"
         # Remove duplicates
         tests_present=($(printf '%s\n' "${tests_present[@]}" | sort | uniq))
+        echo "Tests present in $file: ${tests_present[*]}" >&2
 
         for test in "${tests_present[@]}"; do
             local test_type=${test% *}
@@ -189,6 +190,7 @@ summarize_results() {
             [ -z "$write_lat" ] && write_lat="N/A"
             [ -z "$cpu" ] && cpu="N/A"
 
+            echo "Parsed for $test: read_iops='$read_iops' read_bw='$read_bw' read_lat='$read_lat' cpu='$cpu'" >&2
             data+=("$test|$read_iops|$write_iops|$read_bw|$write_bw|$read_lat|$write_lat|$cpu|")
         done
     done
