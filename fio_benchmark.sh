@@ -78,15 +78,7 @@ format_time() {
     printf '%02d:%02d:%02d' $((s / 3600)) $((s % 3600 / 60)) $((s % 60))
 }
 
-show_progress() {
-    current_test=$((current_test + 1))
-    elapsed=$(($(date +%s) - start_time))
-    remaining=$((total_runtime - elapsed))
-    if [ "$remaining" -lt 0 ]; then remaining=0; fi
-    progress=$((current_test * 20 / total_tests))
-    bar=$(printf '%*s' "$progress" '' | tr ' ' '#'; printf '%*s' "$((20 - progress))" '' | tr ' ' ' ')
-    echo "Progress: [$bar] $((current_test * 100 / total_tests))% | Elapsed: $(format_time $elapsed) | Remaining: ~$(format_time $remaining)" >&2
-}
+
 
 # Set concurrency defaults
 DEFAULT_JOBS=1
@@ -109,6 +101,8 @@ do_disk_test () {
 	local LATENCY="$5"
 	local JOBS="$6"
 	local IODEPTH="$7"
+
+	current_test=$((current_test + 1))
 
 	# Parse TESTTYPE for rw and extra params
 	local rw_part
@@ -140,7 +134,20 @@ do_disk_test () {
 		lat_opt="--lat=1"
 	fi
 
-	fio --filename=${TMPFILE} --sync=1 --rw=$rw_part $extra --bs=${BLOCKSIZE} --numjobs=${JOBS} --iodepth=${IODEPTH} --group_reporting --name=${TESTNAME} --filesize=${FILESIZE} --runtime=${RUNTIME} --direct=1 $lat_opt >> "${OFNAME}" && rm ${TMPFILE}
+	fio --filename=${TMPFILE} --sync=1 --rw=$rw_part $extra --bs=${BLOCKSIZE} --numjobs=${JOBS} --iodepth=${IODEPTH} --group_reporting --name=${TESTNAME} --filesize=${FILESIZE} --runtime=${RUNTIME} --direct=1 $lat_opt >> "${OFNAME}" &
+pid=$!
+while kill -0 $pid 2>/dev/null; do
+    elapsed=$(($(date +%s) - start_time))
+    remaining=$((total_runtime - elapsed))
+    if [ "$remaining" -lt 0 ]; then remaining=0; fi
+    progress=$((current_test * 20 / total_tests))
+    bar=$(printf '%*s' "$progress" '' | tr ' ' '#'; printf '%*s' "$((20 - progress))" '' | tr ' ' ' ')
+    echo -ne "Progress: [$bar] $((current_test * 100 / total_tests))% | Running: $current_test_name | Elapsed: $(format_time $elapsed) | Remaining: ~$(format_time $remaining)\r" >&2
+    sleep 10
+done
+wait $pid
+echo "" >&2
+rm ${TMPFILE}
 
 }
 
@@ -239,31 +246,31 @@ summarize_results() {
 
 if [ "$TEST" = false ]; then
     # Do the test for block sizes 4 KiB, 64 KiB, and 1 MiB, respectively.
-    show_progress
+    current_test_name="Random Read 4k"
     do_disk_test "4k" "${OFNAME1}" "randread" false true $DEFAULT_JOBS $DEFAULT_IODEPTH
-    show_progress
+    current_test_name="Random Write 4k"
     do_disk_test "4k" "${OFNAME1}" "randwrite" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
-    show_progress
+    current_test_name="Sequential Read 4k"
     do_disk_test "4k" "${OFNAME1}" "read" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
-    show_progress
+    current_test_name="Sequential Write 4k"
     do_disk_test "4k" "${OFNAME1}" "write" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
 
-    show_progress
+    current_test_name="Random Read 64k"
     do_disk_test "64k" "${OFNAME2}" "randread" false false $CONC_JOBS $CONC_IODEPTH
-    show_progress
+    current_test_name="Random Write 64k"
     do_disk_test "64k" "${OFNAME2}" "randwrite" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
-    show_progress
+    current_test_name="Sequential Read 64k"
     do_disk_test "64k" "${OFNAME2}" "read" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
-    show_progress
+    current_test_name="Sequential Write 64k"
     do_disk_test "64k" "${OFNAME2}" "write" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
 
-    show_progress
+    current_test_name="Random Read 1M"
     do_disk_test "1M" "${OFNAME3}" "randread" false false $DEFAULT_JOBS $DEFAULT_IODEPTH
-    show_progress
+    current_test_name="Random Write 1M"
     do_disk_test "1M" "${OFNAME3}" "randwrite" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
-    show_progress
+    current_test_name="Sequential Read 1M"
     do_disk_test "1M" "${OFNAME3}" "read" true true $DEFAULT_JOBS $DEFAULT_IODEPTH
-    show_progress
+    current_test_name="Sequential Write 1M"
     do_disk_test "1M" "${OFNAME3}" "write" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
 
     # Lean additional tests
@@ -272,34 +279,34 @@ if [ "$TEST" = false ]; then
 
     # Mixed RandRW
     RUNTIME=$LEAN_RUNTIME
-    show_progress
+    current_test_name="Mixed Random Read/Write 4k"
     do_disk_test "4k" "${BASEDIR}/bm_mixed.txt" "randrw:rwmixread=70" false false $DEFAULT_JOBS $DEFAULT_IODEPTH
 
     # Trim for SSD
     if [ "$SSD" = true ]; then
-        show_progress
+        current_test_name="Trim 4k"
         do_disk_test "4k" "${BASEDIR}/bm_trim.txt" "trim" false false $DEFAULT_JOBS $DEFAULT_IODEPTH
     fi
 
     # Full mode: additional 512k tests
     if [ "$FULL" = true ]; then
         RUNTIME=300
-        show_progress
+        current_test_name="Random Read 512k"
         do_disk_test "512k" "${OFNAME4}" "randread" false false $DEFAULT_JOBS $DEFAULT_IODEPTH
-        show_progress
+        current_test_name="Random Write 512k"
         do_disk_test "512k" "${OFNAME4}" "randwrite" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
-        show_progress
+        current_test_name="Sequential Read 512k"
         do_disk_test "512k" "${OFNAME4}" "read" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
-        show_progress
+        current_test_name="Sequential Write 512k"
         do_disk_test "512k" "${OFNAME4}" "write" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
     fi
 else
     # Test mode: partial tests for quick validation
-    show_progress
+    current_test_name="Random Read 4k"
     do_disk_test "4k" "${OFNAME1}" "randread" false true $DEFAULT_JOBS $DEFAULT_IODEPTH
-    show_progress
+    current_test_name="Random Write 64k"
     do_disk_test "64k" "${OFNAME2}" "randwrite" true false $DEFAULT_JOBS $DEFAULT_IODEPTH
-    show_progress
+    current_test_name="Sequential Read 1M"
     do_disk_test "1M" "${OFNAME3}" "read" true true $DEFAULT_JOBS $DEFAULT_IODEPTH
 fi
 
