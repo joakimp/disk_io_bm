@@ -149,6 +149,8 @@ while kill -0 $pid 2>/dev/null; do
     sleep 10
 done
 wait $pid
+# Clear progress line from terminal
+printf "\r%-${width}s" "                                                                                                                                    " >&2
 echo "" >&2
 rm ${TMPFILE}
 
