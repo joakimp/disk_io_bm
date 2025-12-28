@@ -164,33 +164,26 @@ summarize_results() {
                 local iops=$(grep -A 50 "This is $test_type" "$file" | grep "IOPS=" | head -1 | sed 's/.*IOPS=\([0-9.k]*\).*/\1/')
                 if [[ "$test_type" == randread ]] || [[ "$test_type" == read ]]; then
                     read_iops=$iops
-                    [ -z "$read_iops" ] && echo "Debug: No read IOPS found for $test in $file" >&2
                 elif [[ "$test_type" == randwrite ]] || [[ "$test_type" == write ]]; then
                     write_iops=$iops
-                    [ -z "$write_iops" ] && echo "Debug: No write IOPS found for $test in $file" >&2
                 fi
 
                 # Extract BW
                 if [[ "$test_type" == randread ]] || [[ "$test_type" == read ]]; then
                     read_bw=$(grep -A 50 "This is $test_type" "$file" | grep "read:" | sed 's/.*BW=\([^)]*\).*/\1/' | head -1 | cut -d' ' -f1)
-                    [ -z "$read_bw" ] && echo "Debug: No read BW found for $test in $file" >&2
                 elif [[ "$test_type" == randwrite ]] || [[ "$test_type" == write ]]; then
                     write_bw=$(grep -A 50 "This is $test_type" "$file" | grep "write:" | sed 's/.*BW=\([^)]*\).*/\1/' | head -1 | cut -d' ' -f1)
-                    [ -z "$write_bw" ] && echo "Debug: No write BW found for $test in $file" >&2
                 fi
 
                 # Extract Lat
                 if [[ "$test_type" == randread ]] || [[ "$test_type" == read ]]; then
                     read_lat=$(grep -A 50 "This is $test_type" "$file" | grep "read:" -A 20 | grep "clat" | sed 's/.*avg=\([0-9.]*\).*/\1/' | head -1)
-                    [ -z "$read_lat" ] && echo "Debug: No read lat found for $test in $file" >&2
                 elif [[ "$test_type" == randwrite ]] || [[ "$test_type" == write ]]; then
                     write_lat=$(grep -A 50 "This is $test_type" "$file" | grep "write:" -A 20 | grep "clat" | sed 's/.*avg=\([0-9.]*\).*/\1/' | head -1)
-                    [ -z "$write_lat" ] && echo "Debug: No write lat found for $test in $file" >&2
                 fi
 
                 # Extract CPU
                 cpu=$(grep -A 50 "This is $test_type" "$file" | grep "cpu" -A 1 | grep "usr=" | head -1 | sed 's/.*usr=\([0-9.]*%\), sys=\([0-9.]*%\).*/usr=\1 sys=\2/')
-                [ -z "$cpu" ] && echo "Debug: No CPU found for $test in $file" >&2
             fi
 
             [ -z "$read_iops" ] && read_iops="N/A"
