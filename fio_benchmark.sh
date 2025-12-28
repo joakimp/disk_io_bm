@@ -78,6 +78,8 @@ format_time() {
     printf '%02d:%02d:%02d' $((s / 3600)) $((s % 3600 / 60)) $((s % 60))
 }
 
+width=140
+
 
 
 # Set concurrency defaults
@@ -142,7 +144,12 @@ while kill -0 $pid 2>/dev/null; do
     if [ "$remaining" -lt 0 ]; then remaining=0; fi
     progress=$((current_test * 20 / total_tests))
     bar=$(printf '%*s' "$progress" '' | tr ' ' '#'; printf '%*s' "$((20 - progress))" '' | tr ' ' ' ')
-    echo -ne "\033[2K\rProgress: [$bar] $((current_test * 100 / total_tests))% | Running: $current_test_name | Elapsed: $(format_time $elapsed) | Remaining: ~$(format_time $remaining)" >&2
+    msg="Progress: [$bar] $((current_test * 100 / total_tests))% | Running: $current_test_name | Elapsed: $(format_time $elapsed) | Remaining: ~$(format_time $remaining)"
+    if [ -t 2 ]; then
+        printf "\033[2K\r%-${width}s" "$msg" >&2
+    else
+        echo "$msg" >&2
+    fi
     sleep 10
 done
 wait $pid
