@@ -100,11 +100,7 @@ do_disk_test () {
 		echo "Testing directory: ${BASEDIR}" >> "${OFNAME}"
 	fi
 
-	if [ "$rw_part" = "read" ] || [ "$rw_part" = "write" ]; then
-		echo "This is sequential ${rw_part}, block size = ${BLOCKSIZE}" >> "${OFNAME}"
-	else
-		echo "This is ${rw_part}, block size = ${BLOCKSIZE}" >> "${OFNAME}"
-	fi
+	echo "This is ${rw_part}, block size = ${BLOCKSIZE}" >> "${OFNAME}"
 
 	# Build lat option
 	local lat_opt=""
@@ -122,8 +118,6 @@ summarize_results() {
 
     local data=()
     data+=("Test|IOPS Read|IOPS Write|BW Read|BW Write|Lat Avg Read (us)|Lat Avg Write (us)|CPU|Bar")
-
-    local all_iops=()
 
     for file in "${BASEDIR}"/bm_*.txt; do
         [ -f "$file" ] || continue
@@ -157,10 +151,6 @@ summarize_results() {
                     read_iops=$iops
                 elif [[ "$test_type" == randwrite ]] || [[ "$test_type" == write ]]; then
                     write_iops=$iops
-                elif [[ "$test_type" == randrw ]]; then
-                    # For mixed, assume read IOPS first, but complex, set to N/A for now
-                    read_iops="N/A"
-                    write_iops="N/A"
                 fi
 
                 # Extract BW
@@ -168,8 +158,8 @@ summarize_results() {
                 write_bw=$(grep -A 40 "This is $test_type, block size = $block" "$file" | grep "write:" | sed 's/.*BW=\([^)]*\).*/\1/' | head -1 | cut -d' ' -f1)
 
                 # Extract Lat
-                read_lat=$(grep -A 40 "This is $test_type, block size = $block" "$file" | grep "read:" | sed 's/.*avg=\([0-9.]*\).*/\1/' | head -1)
-                write_lat=$(grep -A 40 "This is $test_type, block size = $block" "$file" | grep "write:" | sed 's/.*avg=\([0-9.]*\).*/\1/' | head -1)
+                read_lat=$(grep -A 40 "This is $test_type, block size = $block" "$file" | grep "read:" -A 20 | grep "clat" | sed 's/.*avg=\([0-9.]*\).*/\1/' | head -1)
+                write_lat=$(grep -A 40 "This is $test_type, block size = $block" "$file" | grep "write:" -A 20 | grep "clat" | sed 's/.*avg=\([0-9.]*\).*/\1/' | head -1)
 
                 # Extract CPU
                 cpu=$(grep -A 40 "This is $test_type, block size = $block" "$file" | grep "cpu" -A 1 | grep "usr=" | head -1 | sed 's/.*usr=\([0-9.]*%\), sys=\([0-9.]*%\).*/usr=\1 sys=\2/')
@@ -184,38 +174,8 @@ summarize_results() {
             [ -z "$cpu" ] && cpu="N/A"
 
             data+=("$test|$read_iops|$write_iops|$read_bw|$write_bw|$read_lat|$write_lat|$cpu|")
-
-            # Collect IOPS for bars
-            if [ "$read_iops" != "N/A" ]; then all_iops+=("$read_iops"); fi
-            if [ "$write_iops" != "N/A" ]; then all_iops+=("$write_iops"); fi
         done
     done
-
-    # Calculate bars
-    local max_iops=0
-    for iops in "${all_iops[@]}"; do
-        if [ "$iops" -gt "$max_iops" ] 2>/dev/null; then max_iops=$iops; fi
-    done
-
-    if [ "$max_iops" -gt 0 ]; then
-        local bar_length=20
-        local i=1
-        while [ $i -lt ${#data[@]} ]; do
-            local line=${data[$i]}
-            IFS='|' read -r test read_iops write_iops read_bw write_bw read_lat write_lat cpu bar <<< "$line"
-            local bar_str=""
-            if [ "$read_iops" != "N/A" ] && [ "$read_iops" -gt 0 ]; then
-                local len=$(( read_iops * bar_length / max_iops ))
-                bar_str=$(printf '%*s' "$len" '' | tr ' ' '#')
-            fi
-            if [ "$write_iops" != "N/A" ] && [ "$write_iops" -gt 0 ]; then
-                local len=$(( write_iops * bar_length / max_iops ))
-                bar_str="${bar_str}$(printf '%*s' "$len" '' | tr ' ' '*')"
-            fi
-            data[$i]="$test|$read_iops|$write_iops|$read_bw|$write_bw|$read_lat|$write_lat|$cpu|$bar_str"
-            i=$((i+1))
-        done
-    fi
 
     # Output
     local table=$(printf '%s\n' "${data[@]}")
@@ -273,5 +233,5 @@ else
 fi
 
 # Generate summary
-summarize_results
+# summarize_results
 
