@@ -138,6 +138,10 @@ summarize_results() {
         for test in "${tests_present[@]}"; do
             local test_type=${test% *}
             local block=${test#* }
+            # Skip invalid test types
+            if [[ "$test_type" != "randread" && "$test_type" != "randwrite" && "$test_type" != "read" && "$test_type" != "write" && "$test_type" != "trim" ]]; then
+                continue
+            fi
 
             local read_iops="N/A"
             local write_iops="N/A"
@@ -149,7 +153,7 @@ summarize_results() {
 
             if [ "$test_type" != "trim" ]; then
                 # Extract IOPS
-                local iops=$(grep -A 50 "This is $test_type" "$file" | grep "IOPS=" | head -1 | cut -d= -f2)
+                local iops=$(grep -A 50 "This is $test_type" "$file" | grep "IOPS=" | head -1 | sed 's/.*IOPS=\([0-9.k]*\).*/\1/')
                 if [[ "$test_type" == randread ]] || [[ "$test_type" == read ]]; then
                     read_iops=$iops
                     [ -z "$read_iops" ] && echo "Debug: No read IOPS found for $test in $file" >&2
