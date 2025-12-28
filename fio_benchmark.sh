@@ -133,7 +133,15 @@ summarize_results() {
             fi
         done < "$file"
         # Remove duplicates
-        tests_present=($(printf '%s\n' "${tests_present[@]}" | sort | uniq))
+        local seen=()
+        local unique_tests=()
+        for t in "${tests_present[@]}"; do
+            if [[ ! " ${seen[*]} " =~ " $t " ]]; then
+                seen+=("$t")
+                unique_tests+=("$t")
+            fi
+        done
+        tests_present=("${unique_tests[@]}")
 
         for test in "${tests_present[@]}"; do
             local test_type=${test% *}
