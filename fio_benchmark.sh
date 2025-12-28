@@ -121,18 +121,16 @@ summarize_results() {
 
     for file in "${BASEDIR}"/bm_*.txt; do
         [ -f "$file" ] || continue
-        local basename=$(basename "$file" .txt)
-        case "$basename" in
-            bm_4k) tests=("randread 4k" "randwrite 4k" "read 4k" "write 4k") ;;
-            bm_64k) tests=("randread 64k" "randwrite 64k" "read 64k" "write 64k") ;;
-            bm_1M) tests=("randread 1M" "randwrite 1M" "read 1M" "write 1M") ;;
-            bm_512k) tests=("randread 512k" "randwrite 512k" "read 512k" "write 512k") ;;
-            bm_mixed) tests=("randrw 4k") ;;
-            bm_trim) tests=("trim 4k") ;;
-            *) continue ;;
-        esac
 
-        for test in "${tests[@]}"; do
+        # Collect actual tests present in the file
+        local tests_present=()
+        while IFS= read -r line; do
+            if [[ "$line" =~ ^This\ is\ (.+),\ block\ size\ =\ (.+)$ ]]; then
+                tests_present+=("${BASH_REMATCH[1]} ${BASH_REMATCH[2]}")
+            fi
+        done < "$file"
+
+        for test in "${tests_present[@]}"; do
             local test_type=${test% *}
             local block=${test#* }
 
