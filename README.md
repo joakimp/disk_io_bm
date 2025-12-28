@@ -36,6 +36,8 @@ Run the script with optional flags:
 
 **Note**: On macOS, ensure `fio` is installed (e.g., via Homebrew). Latency tracking (`--lat`) may not be supported in older fio versions and will be automatically disabled with a warning. Summary parsing is optimized for macOS fio output; use `--test` for quick checks.
 
+The script displays progress updates during execution, including an ASCII progress bar, elapsed time (HH:MM:SS), and estimated remaining time.
+
 Results are saved to bm_*.txt files.
 
 ## Summary Output
