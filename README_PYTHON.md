@@ -292,7 +292,6 @@ Disk I/O Benchmark Results
 
 ```
 
-Note: Actual output includes CPU usage and runtime columns not shown here for brevity.
 
 **JSON Output:**
 ```json
