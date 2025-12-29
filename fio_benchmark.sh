@@ -239,8 +239,11 @@ summarize_results() {
  
     local data=()
     data+=("Test|IOPS Read|IOPS Write|BW Read|BW Write|Lat Avg Read (us)|Lat Avg Write (us)|CPU|Runtime")
- 
-    for file in "${RESULTS_DIR}"/bm_*.txt "${RESULTS_DIR}"/bm_*_individual.txt; do
+    
+    # Get all benchmark files once to avoid duplicate processing
+    local files=($(find "${RESULTS_DIR}" -maxdepth 1 -type f \( -name "bm_*.txt" -o -name "bm_*_individual.txt" \)))
+    
+    for file in "${files[@]}"; do
         [ -f "$file" ] || continue
 
         # Collect actual tests present in file
@@ -352,7 +355,8 @@ summarize_results() {
 
     # Calculate total runtime from all test files
     local total_runtime_seconds=0
-    for file in "${BASEDIR}"/bm_*.txt "${BASEDIR}"/bm_*_individual.txt; do
+    local files=($(find "${RESULTS_DIR}" -maxdepth 1 -type f \( -name "bm_*.txt" -o -name "bm_*_individual.txt" \)))
+    for file in "${files[@]}"; do
         [ -f "$file" ] || continue
         local test_runtime_ms=$(grep "run=" "$file" | head -1 | sed 's/.*run=\([0-9]*\)-[0-9]*msec.*/\1/')
         if [ -n "$test_runtime_ms" ]; then
