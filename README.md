@@ -45,7 +45,7 @@ Test types:
 - `--randwrite`: Random write tests
 - `--read`: Sequential read tests
 - `--write`: Sequential write tests
-- `--mixed`: Mixed random read/write (70/30 split) tests
+- `--randrw`: Mixed random read/write (70/30 split) tests
 - `--trim`: Trim tests (requires --ssd)
 
 Block sizes:
@@ -62,8 +62,8 @@ bash fio_benchmark.sh --randread --4k --64k
 # Run sequential read and write on 1M
 bash fio_benchmark.sh --read --write --1M
 
-# Run mixed tests on all block sizes
-bash fio_benchmark.sh --mixed --4k --64k --1M --512k
+# Run mixed random read/write tests on all block sizes
+bash fio_benchmark.sh --randrw --4k --64k --1M --512k
 
 # Run trim test with SSD flag
 bash fio_benchmark.sh --trim --4k --ssd

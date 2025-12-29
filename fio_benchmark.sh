@@ -46,7 +46,7 @@ RANDREAD=false
 RANDWRITE=false
 READ=false
 WRITE=false
-MIXED=false
+RANDRW=false
 TRIM=false
 
 # Block size flags
@@ -66,7 +66,7 @@ while [[ $# -gt 0 ]]; do
         --randwrite) RANDWRITE=true ;;
         --read) READ=true ;;
         --write) WRITE=true ;;
-        --mixed) MIXED=true ;;
+        --randrw) RANDRW=true ;;
         --trim) TRIM=true ;;
         --4k) BS_4K=true ;;
         --64k) BS_64K=true ;;
@@ -84,7 +84,7 @@ validate_flags() {
 
     # Check if any individual test flags are set
     if [ "$RANDREAD" = true ] || [ "$RANDWRITE" = true ] || [ "$READ" = true ] || \
-       [ "$WRITE" = true ] || [ "$MIXED" = true ] || [ "$TRIM" = true ]; then
+       [ "$WRITE" = true ] || [ "$RANDRW" = true ] || [ "$TRIM" = true ]; then
         individual_tests=true
     fi
 
@@ -119,7 +119,7 @@ validate_flags
 # Determine mode
 INDIVIDUAL_TESTS=false
 if [ "$RANDREAD" = true ] || [ "$RANDWRITE" = true ] || [ "$READ" = true ] || \
-   [ "$WRITE" = true ] || [ "$MIXED" = true ] || [ "$TRIM" = true ]; then
+   [ "$WRITE" = true ] || [ "$RANDRW" = true ] || [ "$TRIM" = true ]; then
     INDIVIDUAL_TESTS=true
 fi
 
@@ -146,7 +146,7 @@ elif [ "$FULL" = true ]; then
     [ "$RANDWRITE" = true ] && test_types=$((test_types + 1))
     [ "$READ" = true ] && test_types=$((test_types + 1))
     [ "$WRITE" = true ] && test_types=$((test_types + 1))
-    [ "$MIXED" = true ] && test_types=$((test_types + 1))
+    [ "$RANDRW" = true ] && test_types=$((test_types + 1))
     [ "$TRIM" = true ] && test_types=$((test_types + 1))
 
     block_count=0
@@ -270,7 +270,7 @@ summarize_results() {
             local test_type=${test% *}
             local block=${test#* }
             # Skip invalid test types
-            if [[ "$test_type" != "randread" && "$test_type" != "randwrite" && "$test_type" != "read" && "$test_type" != "write" && "$test_type" != "trim" ]]; then
+            if [[ "$test_type" != "randread" && "$test_type" != "randwrite" && "$test_type" != "read" && "$test_type" != "write" && "$test_type" != "randrw" && "$test_type" != "trim" ]]; then
                 continue
             fi
 
@@ -334,7 +334,7 @@ summarize_results() {
 run_individual_tests() {
     local test_types=("randread" "randwrite" "read" "write" "randrw" "trim")
     local block_sizes=("4k" "64k" "1M" "512k")
-    local type_vars=("RANDREAD" "RANDWRITE" "READ" "WRITE" "MIXED" "TRIM")
+    local type_vars=("RANDREAD" "RANDWRITE" "READ" "WRITE" "RANDRW" "TRIM")
     local size_vars=("BS_4K" "BS_64K" "BS_1M" "BS_512K")
 
     local i j
@@ -358,7 +358,7 @@ run_individual_tests() {
 
                     # Set test name and description
                     if [ "$test_type" = "randrw" ]; then
-                        current_test_name="Mixed Random Read/Write ${block_size}"
+                        current_test_name="Randrw ${block_size}"
                     elif [ "$test_type" = "randread" ]; then
                         current_test_name="Randread ${block_size}"
                     elif [ "$test_type" = "randwrite" ]; then
@@ -433,8 +433,8 @@ elif [ "$FULL" = true ]; then
 
     # Mixed RandRW
     RUNTIME=$LEAN_RUNTIME
-    current_test_name="Mixed Random Read/Write 4k"
-    do_disk_test "4k" "${BASEDIR}/bm_mixed.txt" "randrw:rwmixread=70" false $CONC_JOBS $CONC_IODEPTH
+    current_test_name="Randrw 4k"
+    do_disk_test "4k" "${BASEDIR}/bm_randrw.txt" "randrw:rwmixread=70" false $CONC_JOBS $CONC_IODEPTH
 
     # Trim for SSD
     if [ "$SSD" = true ]; then
@@ -487,8 +487,8 @@ else
 
     # Mixed RandRW
     RUNTIME=$LEAN_RUNTIME
-    current_test_name="Mixed Random Read/Write 4k"
-    do_disk_test "4k" "${BASEDIR}/bm_mixed.txt" "randrw:rwmixread=70" false $CONC_JOBS $CONC_IODEPTH
+    current_test_name="Randrw 4k"
+    do_disk_test "4k" "${BASEDIR}/bm_randrw.txt" "randrw:rwmixread=70" false $CONC_JOBS $CONC_IODEPTH
 
     # Trim for SSD
     if [ "$SSD" = true ]; then
