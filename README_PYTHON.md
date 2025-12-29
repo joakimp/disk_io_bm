@@ -555,3 +555,46 @@ brew install fio
 | macOS Support | ✓ | ✓ (with psync engine) |
 | Extensibility | Hard | ✓ Easy to extend |
 | Dependencies | bash, fio | Python 3.10+, uv, fio |
+| Dependencies | bash, fio | Python 3.10+, uv, fio |
+
+## Project Structure
+
+```
+disk_io_bm/
+├── pyproject.toml           # UV dependency management
+├── cli.py                  # Click-based CLI (disk-benchmark-py)
+├── src/
+│   ├── __init__.py
+│   ├── config.py         # Configuration (BenchmarkConfig, Mode, StorageBackend)
+│   ├── executor.py       # FIO test execution with JSON parsing
+│   ├── storage/
+│   │   ├── __init__.py
+│   │   ├── sqlite.py  # SQLite storage backend
+│   │   ├── json.py   # JSON file storage
+│   │   └── csv_storage.py  # CSV file storage
+│   ├── formatters/
+│   │   ├── __init__.py
+│   │   ├── table.py  # Rich table formatter
+│   │   ├── json.py   # JSON formatter
+│   │   └── csv_formatter.py  # CSV and Excel formatters
+│   ├── plots/
+│   │   ├── __init__.py
+│   │   ├── base.py   # Abstract base plotter
+│   │   └── plotly.py  # Interactive Plotly plots
+│   └── analytics/
+│       ├── __init__.py
+│       ├── statistics.py  # Basic and detailed statistics
+│       └── comparison.py  # Run comparison logic
+├── tests/
+│   ├── __init__.py
+│   ├── test_config.py  # Configuration tests
+│   ├── test_executor.py  # Executor tests (mocked FIO output)
+│   ├── test_formatters.py # Formatter tests
+│   ├── test_storage.py  # Storage tests
+│   ├── test_plots.py    # Plot tests
+│   └── test_analytics.py # Analytics tests
+├── fio_benchmark.sh        # Bash implementation
+├── README.md               # Main entry point
+├── README_BASH.md          # Bash documentation
+└── README_PYTHON.md         # Python documentation (this file)
+```
