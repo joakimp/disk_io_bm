@@ -14,11 +14,21 @@ RUNTIME=300
 TMPFILE=tmp_test
 TESTNAME=disk_test
 
+# Store results according to this
+BASEDIR="$(pwd)"
+
+# Backup existing output files
+timestamp=$(date +%Y%m%d_%H%M%S)
+rm -f "${BASEDIR}"/*.bak 2>/dev/null
+for file in "${BASEDIR}"/bm_*.txt "${BASEDIR}"/summary.txt; do
+    if [ -f "$file" ]; then
+        mv "$file" "${file}.${timestamp}.bak"
+    fi
+done
+
 # Clean previous output files
 rm -f "${BASEDIR}"/bm_*.txt "${BASEDIR}"/summary.txt
 
-# Store results according to this
-BASEDIR="$(pwd)"
 OFNAME1="${BASEDIR}/bm_4k.txt"
 OFNAME2="${BASEDIR}/bm_64k.txt"
 OFNAME3="${BASEDIR}/bm_1M.txt"
