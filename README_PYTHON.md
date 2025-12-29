@@ -139,6 +139,10 @@ uv run disk-benchmark-py run --output-format csv
 **Storage Backends:**
 ```bash
 # SQLite (default - persistent database)
+# If no --database flag is specified, SQLite is used automatically
+uv run disk-benchmark-py run
+
+# Explicitly use SQLite
 uv run disk-benchmark-py run --database sqlite
 
 # JSON files (timestamped)

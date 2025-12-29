@@ -120,6 +120,23 @@ uv run disk-benchmark-py run --query-sql "SELECT * FROM benchmarks WHERE test_ty
 uv run disk-benchmark-py run --output-format json
 ```
 
+### Storage Backends
+
+```bash
+# SQLite (default - persistent database)
+# If no --database flag is specified, SQLite is used automatically
+uv run disk-benchmark-py run
+
+# Explicitly use SQLite
+uv run disk-benchmark-py run --database sqlite
+
+# JSON files (timestamped)
+uv run disk-benchmark-py run --database json
+
+# No storage (in-memory only)
+uv run disk-benchmark-py run --no-database
+```
+
 ## Output
 
 Both tools save results to `results/` directory:
