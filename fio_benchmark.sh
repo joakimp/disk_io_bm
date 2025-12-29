@@ -121,7 +121,11 @@ do_disk_test () {
 
 	echo "This is ${rw_part}, block size = ${BLOCKSIZE}" >> "${OFNAME}"
 
-	fio --filename=${TMPFILE} --sync=1 --rw=$rw_part $extra --bs=${BLOCKSIZE} --numjobs=${JOBS} --iodepth=${IODEPTH} --group_reporting --name=${TESTNAME} --filesize=${FILESIZE} --runtime=${RUNTIME} --direct=1 >> "${OFNAME}" &
+	if [ -n "$extra" ]; then
+		fio --filename=${TMPFILE} --sync=1 --rw=$rw_part --${extra} --bs=${BLOCKSIZE} --numjobs=${JOBS} --iodepth=${IODEPTH} --group_reporting --name=${TESTNAME} --filesize=${FILESIZE} --runtime=${RUNTIME} --direct=1 >> "${OFNAME}" &
+	else
+		fio --filename=${TMPFILE} --sync=1 --rw=$rw_part --bs=${BLOCKSIZE} --numjobs=${JOBS} --iodepth=${IODEPTH} --group_reporting --name=${TESTNAME} --filesize=${FILESIZE} --runtime=${RUNTIME} --direct=1 >> "${OFNAME}" &
+	fi
 	pid=$!
 	while kill -0 $pid 2>/dev/null; do
 	    elapsed=$(($(date +%s) - start_time))
@@ -137,7 +141,7 @@ do_disk_test () {
 	# Clear progress line from terminal
 	printf "\r%-${width}s" "                                                                                                                                    " >&2
 	echo "" >&2
-	rm ${TMPFILE}
+	rm -f ${TMPFILE}
 }
 
 summarize_results() {
