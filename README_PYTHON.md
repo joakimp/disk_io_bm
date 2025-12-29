@@ -145,7 +145,7 @@ uv run disk-benchmark-py run --database sqlite
 uv run disk-benchmark-py run --database json
 
 # No storage (in-memory only)
-uv run disk-benchmark-py run --database none
+uv run disk-benchmark-py run --no-database
 ```
 
 **History & Queries:**
