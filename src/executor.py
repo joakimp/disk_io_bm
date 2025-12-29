@@ -195,6 +195,7 @@ class BenchmarkExecutor:
                     "--ioengine=psync",
                     "--iodepth=1",
                     "--numjobs=1",
+                    "--disable-shared=1",
                 ]
             )
         else:
