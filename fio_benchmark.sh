@@ -21,15 +21,6 @@ BASEDIR="$(pwd)"
 RESULTS_DIR="${BASEDIR}/results"
 mkdir -p "${RESULTS_DIR}"
 
-# Backup existing output files
-timestamp=$(date +%Y%m%d_%H%M%S)
-rm -f "${RESULTS_DIR}"/*.bak 2>/dev/null
-for file in "${RESULTS_DIR}"/bm_*.txt "${RESULTS_DIR}"/summary.txt; do
-    if [ -f "$file" ]; then
-        mv "$file" "${file}.${timestamp}.bak"
-    fi
-done
- 
 # Clean previous output files
 rm -f "${RESULTS_DIR}"/bm_*.txt "${RESULTS_DIR}"/summary.txt
  
