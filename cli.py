@@ -72,6 +72,7 @@ def main():
     "--plot-output-dir", type=click.Path(), default="results/plots", help="Directory for plot files"
 )
 @click.option("--open-browser", is_flag=True, help="Open plots in browser after generation")
+@click.option("--no-database", is_flag=True, help="Disable database storage (for dummy tests)")
 @click.option(
     "--db-path",
     "db_path",
@@ -101,7 +102,9 @@ def run(**kwargs):
         "results_dir": "results",
         "output_format": kwargs["output_format"],
         "json_output_dir": "results/json",
-        "database": StorageBackend(kwargs["database"]),
+        "database": StorageBackend.NONE
+        if kwargs["no_database"]
+        else StorageBackend(kwargs["database"]),
         "db_path": kwargs["db_path"],
         "history": kwargs["history"],
         "query_sql": kwargs["query_sql"],
