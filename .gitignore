@@ -15,6 +15,9 @@ build/
 results/
 *.bak
 
+# Package managers
+uv.lock
+
 # IDEs
 .vscode/
 .idea/

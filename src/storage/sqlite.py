@@ -92,9 +92,111 @@ class SQLiteStorage:
             )
             return [dict(row) for row in cursor]
 
-    def custom_query(self, sql: str) -> List[dict]:
+    def custom_query(self, sql: str, params: tuple = ()) -> List[dict]:
         """Execute custom SQL query"""
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
-            cursor = conn.execute(sql)
+            if params:
+                cursor = conn.execute(sql, params)
+            else:
+                cursor = conn.execute(sql)
             return [dict(row) for row in cursor]
+
+    def get_statistics(self, detailed: bool = False) -> dict:
+        """Calculate statistics from stored benchmarks"""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute("SELECT * FROM benchmarks")
+            results = [dict(row) for row in cursor]
+
+        if not results:
+            return {}
+
+        from src.analytics import Statistics
+
+        if detailed:
+            return Statistics.calculate_detailed(results)
+        else:
+            return Statistics.calculate_basic(results)
+
+    def compare_runs(self, run_id1: int, run_id2: int, threshold: float = 0.1) -> dict:
+        """Compare two specific runs"""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor1 = conn.execute("SELECT * FROM benchmarks WHERE id=?", (run_id1,))
+            cursor2 = conn.execute("SELECT * FROM benchmarks WHERE id=?", (run_id2,))
+            run1 = [dict(row) for row in cursor1]
+            run2 = [dict(row) for row in cursor2]
+
+        if not run1 or not run2:
+            return {"error": "One or both run IDs not found"}
+
+        from src.analytics import Comparison
+
+        return Comparison.compare_runs(run1, run2, threshold)
+
+    def export_to_excel(self, filepath: str, filters: dict = None) -> None:
+        """Export database to Excel with multiple sheets"""
+        import pandas as pd
+
+        query = "SELECT * FROM benchmarks WHERE 1=1"
+        params = []
+
+        if filters:
+            if filters.get("after"):
+                query += " AND timestamp >= ?"
+                params.append(filters["after"])
+            if filters.get("before"):
+                query += " AND timestamp <= ?"
+                params.append(filters["before"])
+            if filters.get("test_type"):
+                placeholders = ",".join(["?" for _ in filters["test_type"]])
+                query += f" AND test_type IN ({placeholders})"
+                params.extend(filters["test_type"])
+            if filters.get("block_size"):
+                placeholders = ",".join(["?" for _ in filters["block_size"]])
+                query += f" AND block_size IN ({placeholders})"
+                params.extend(filters["block_size"])
+
+        with sqlite3.connect(self.db_path) as conn:
+            df = pd.read_sql_query(query, conn, params=params if params else ())
+
+        if df.empty:
+            print("No data to export")
+            return
+
+        with pd.ExcelWriter(
+            filepath, engine="openpyxl", datetime_format="YYYY-MM-DD HH:MM:SS"
+        ) as writer:
+            summary_df = df.groupby(["test_type", "block_size"]).agg(
+                {
+                    "read_iops": ["mean", "min", "max"],
+                    "write_iops": ["mean", "min", "max"],
+                    "read_bw": ["mean", "min", "max"],
+                    "write_bw": ["mean", "min", "max"],
+                }
+            )
+            summary_df.columns = ["_".join(col).strip() for col in summary_df.columns.values]
+            summary_df.reset_index(inplace=True)
+            summary_df.to_excel(writer, sheet_name="Summary", index=False)
+
+            raw_df = df[
+                [
+                    "id",
+                    "timestamp",
+                    "test_type",
+                    "block_size",
+                    "read_iops",
+                    "write_iops",
+                    "read_bw",
+                    "write_bw",
+                    "read_latency_us",
+                    "write_latency_us",
+                    "cpu",
+                    "runtime_sec",
+                    "status",
+                ]
+            ]
+            raw_df.to_excel(writer, sheet_name="Raw", index=False)
+
+        print(f"Exported to {filepath}")

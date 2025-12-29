@@ -17,10 +17,12 @@ Feature-rich Python disk I/O benchmarking tool using fio. Extensible with multip
 - **Test Types**: randread, randwrite, read, write, randrw, trim
 - **Block Sizes**: 4k, 64k, 1M, 512k
 - **Flags**: --ssd, --hdd, --concurrency, --quick, --filesize
-- **Output Formats**: table (default), json, csv
-- **Storage Backends**: SQLite (default), JSON, none
+- **Output Formats**: table (default), json, csv, excel
+- **Storage Backends**: SQLite (default), JSON, CSV, none
+- **Plot Generation**: Interactive Plotly plots (bar, scatter, radar, line)
 - **History**: Query last N benchmark runs
 - **Custom Queries**: Execute SQL queries on benchmark database
+- **Analytics**: Statistical analysis and run comparison
 - **Progress**: Rich progress bars with current test, elapsed time, estimated remaining
 - **Error Handling**: Graceful handling of FIO failures, timeouts, TRIM warnings
 
@@ -161,6 +163,27 @@ uv run disk-benchmark-py run --query-sql "SELECT * FROM benchmarks WHERE test_ty
 uv run disk-benchmark-py run --query-sql "SELECT test_type, block_size, AVG(read_iops) as avg_iops FROM benchmarks GROUP BY test_type, block_size"
 ```
 
+**Plot Generation:**
+```bash
+# Generate plots after benchmark
+uv run disk-benchmark-py run --plots
+
+# Generate specific plot types
+uv run disk-benchmark-py run --plots --plot-types bar,scatter
+
+# Generate plots and open in browser
+uv run disk-benchmark-py run --plots --interactive-plots
+
+# Generate plots with custom output directory
+uv run disk-benchmark-py run --plots --plot-output-dir /custom/plots
+```
+
+**Excel Export:**
+```bash
+# Export to Excel
+uv run disk-benchmark-py run --output-format excel --output results.xlsx
+```
+
 **Advanced Options:**
 ```bash
 # Custom runtime
@@ -296,6 +319,85 @@ Test Type,Block Size,Read IOPS,Write IOPS,Read MB/s,Write MB/s,Read Lat (us),Wri
 randread,4k,15000,0,58.50,0.00,50.00,0,usr=10.0% sys=5.0%,15.00,OK
 ...
 ```
+
+### Compare Runs
+
+Compare benchmark runs to identify performance changes:
+
+```bash
+# Compare last 2 runs (default)
+disk-benchmark-py compare
+
+# Compare last 5 runs with statistics
+disk-benchmark-py compare --last 5 --statistics
+
+# Compare specific runs with threshold 20%
+disk-benchmark-py compare --run-ids 42 43 --threshold 0.2
+
+# Compare and export to Excel
+disk-benchmark-py compare --last 3 --export comparison.xlsx
+
+# Compare with plots
+disk-benchmark-py compare --last 2 --plots
+```
+
+**Comparison Features:**
+- Side-by-side table with deltas and percentages
+- Configurable threshold for significant changes (default: 10%)
+- Optional statistical analysis
+- Optional comparison plots
+- Export to CSV/Excel
+
+### Analyze History
+
+Analyze historical benchmark data:
+
+```bash
+# Overall statistics
+disk-benchmark-py analyze
+
+# Detailed statistics for randread
+disk-benchmark-py analyze --test-type randread --detailed
+
+# Statistics with trends and plots
+disk-benchmark-py analyze --trends --plots
+
+# Filter by block size and export
+disk-benchmark-py analyze --block-size 4k 64k --export analysis.xlsx
+```
+
+**Analysis Features:**
+- Basic statistics: mean, median, min, max per metric
+- Detailed statistics: add std dev, percentiles, count
+- Filter by test type and block size
+- Optional trend analysis over time
+- Generate visualization plots
+- Export to CSV/Excel
+
+### Export Data
+
+Export benchmark data to various formats:
+
+```bash
+# Export all data to Excel
+disk-benchmark-py export --format excel --output all_results.xlsx
+
+# Export CSV for date range
+disk-benchmark-py export --format csv --output recent.csv --after 2024-01-01
+
+# Filter by test type and export
+disk-benchmark-py export --format excel --output randread.xlsx --test-type randread
+
+# Export with date filters
+disk-benchmark-py export --format excel --output 2024_results.xlsx --after 2024-01-01 --before 2024-12-31
+```
+
+**Export Features:**
+- Formats: CSV, Excel
+- Excel organized by metrics (Summary, IOPS, Bandwidth, Latency, Raw)
+- ISO date format support (YYYY-MM-DD)
+- Filter by date range, test type, block size
+- Multiple sheets for easy navigation
 
 ## Development
 
@@ -445,12 +547,56 @@ brew install fio
 | Flags | --ssd, --hdd, --concurrency, --quick, --filesize | ✓ Same |
 | Progress | ASCII bar | ✓ Rich progress bars |
 | Output | Text + ASCII table | ✓ Table/JSON/CSV |
-| Storage | Text files only | ✓ SQLite database + JSON files |
+| Storage | Text files only | ✓ SQLite database + JSON + CSV files |
 | History | Manual file review | ✓ Queryable history (SQL) |
+| Plot Generation | N/A | ✓ Interactive Plotly plots |
+| Analytics | N/A | ✓ Statistics and comparison |
 | Error Handling | Basic | ✓ Detailed messages |
 | macOS Support | ✓ | ✓ (with psync engine) |
 | Extensibility | Hard | ✓ Easy to extend |
 | Dependencies | bash, fio | Python 3.10+, uv, fio |
+
+## Project Structure
+
+```
+disk_io_bm/
+├── pyproject.toml           # UV dependency management
+├── cli.py                  # Click-based CLI (disk-benchmark-py)
+├── src/
+│   ├── __init__.py
+│   ├── config.py         # Configuration (BenchmarkConfig, Mode, StorageBackend)
+│   ├── executor.py       # FIO test execution with JSON parsing
+│   ├── storage/
+│   │   ├── __init__.py
+│   │   ├── sqlite.py  # SQLite storage backend
+│   │   ├── json.py   # JSON file storage
+│   │   └── csv_storage.py  # CSV file storage
+│   ├── formatters/
+│   │   ├── __init__.py
+│   │   ├── table.py  # Rich table formatter
+│   │   ├── json.py   # JSON formatter
+│   │   └── csv_formatter.py  # CSV and Excel formatters
+│   ├── plots/
+│   │   ├── __init__.py
+│   │   ├── base.py   # Abstract base plotter
+│   │   └── plotly.py  # Interactive Plotly plots
+│   └── analytics/
+│       ├── __init__.py
+│       ├── statistics.py  # Basic and detailed statistics
+│       └── comparison.py  # Run comparison logic
+├── tests/
+│   ├── __init__.py
+│   ├── test_config.py  # Configuration tests
+│   ├── test_executor.py  # Executor tests (mocked FIO output)
+│   ├── test_formatters.py # Formatter tests
+│   ├── test_storage.py  # Storage tests
+│   ├── test_plots.py    # Plot tests
+│   └── test_analytics.py # Analytics tests
+├── fio_benchmark.sh        # Bash implementation
+├── README.md               # Main entry point
+├── README_BASH.md          # Bash documentation
+└── README_PYTHON.md         # Python documentation (this file)
+```
 
 ## Project Structure
 

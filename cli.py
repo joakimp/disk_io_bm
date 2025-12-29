@@ -7,8 +7,10 @@ from rich.panel import Panel
 
 from src.config import BenchmarkConfig, Mode, StorageBackend
 from src.executor import BenchmarkExecutor
-from src.storage import SQLiteStorage, JsonStorage
-from src.formatters import TableFormatter, JsonFormatter
+from src.storage import SQLiteStorage, JsonStorage, CsvStorage
+from src.formatters import TableFormatter, JsonFormatter, CsvFormatter, ExcelFormatter
+from src.plots import create_plotter
+from src.analytics import Statistics, Comparison
 
 
 @click.group()
@@ -47,15 +49,30 @@ def main():
 @click.option(
     "--output-format",
     "output_format",
-    type=click.Choice(["table", "json"]),
+    type=click.Choice(["table", "json", "csv", "excel"]),
     default="table",
-    help="Output format (table/json)",
+    help="Output format (table/json/csv/excel)",
 )
 @click.option(
     "--database",
-    type=click.Choice(["none", "sqlite", "json"]),
+    type=click.Choice(["none", "sqlite", "json", "csv"]),
     default="sqlite",
-    help="Storage backend (none/sqlite/json)",
+    help="Storage backend (none/sqlite/json/csv)",
+)
+@click.option("--plots", is_flag=True, help="Generate plots after benchmark")
+@click.option(
+    "--plot-types",
+    "plot_types",
+    multiple=True,
+    type=click.Choice(["bar", "scatter", "radar", "line"]),
+    default=["bar", "scatter", "radar"],
+    help="Plot types to generate",
+)
+@click.option(
+    "--plot-output-dir", type=click.Path, default="results/plots", help="Directory for plot files"
+)
+@click.option(
+    "--interactive-plots", is_flag=True, help="Generate interactive plots and open in browser"
 )
 @click.option(
     "--db-path",
@@ -90,6 +107,10 @@ def run(**kwargs):
         "db_path": kwargs["db_path"],
         "history": kwargs["history"],
         "query_sql": kwargs["query_sql"],
+        "generate_plots": kwargs["plots"],
+        "plot_types": list(kwargs["plot_types"]),
+        "plot_output_dir": kwargs["plot_output_dir"],
+        "interactive_plots": kwargs["interactive_plots"],
     }
 
     # Quick mode overrides
@@ -140,6 +161,8 @@ def run(**kwargs):
             storage = SQLiteStorage(config.db_path)
         elif config.database == StorageBackend.JSON:
             storage = JsonStorage(config.results_dir)
+        elif config.database == StorageBackend.CSV:
+            storage = CsvStorage(config.results_dir)
         if storage:
             storage.save_results(results, config)
 
@@ -150,6 +173,33 @@ def run(**kwargs):
     elif config.output_format == "json":
         formatter = JsonFormatter(config.json_output_dir)
         formatter.format(results)
+    elif config.output_format == "csv":
+        formatter = CsvFormatter("results/benchmark_results.csv")
+        formatter.format(results)
+    elif config.output_format == "excel":
+        formatter = ExcelFormatter("results/benchmark_results.xlsx")
+        formatter.format(results)
+
+    # Generate plots if requested
+    if config.generate_plots and results:
+        try:
+            from glob import glob
+
+            plotter = create_plotter(config.plot_types, results, config_data)
+            plotter.generate()
+
+            if config.interactive_plots:
+                from glob import glob
+
+                for plot_file in glob(str(config.plot_output_dir) + "/*.html"):
+                    console.print(f"[green]Opening {plot_file} in browser...[/green]")
+                    plotter.open_in_browser(plot_file)
+
+            console.print(f"[green]Plots saved to {config.plot_output_dir}/[/green]")
+        except ImportError as e:
+            console.print(f"[yellow]Could not import plotting libraries: {e}[/yellow]")
+        except Exception as e:
+            console.print(f"[red]Error generating plots: {e}[/red]")
 
 
 @main.command()
@@ -204,3 +254,202 @@ def test(**kwargs):
 
     formatter = TableFormatter(console)
     formatter.format(results)
+
+
+@main.command()
+@click.option("--last", type=int, default=2, help="Compare last N runs")
+@click.option("--run-ids", "run_ids", nargs=2, type=int, help="Compare specific run IDs")
+@click.option("--plots", is_flag=True, help="Generate comparison plots")
+@click.option("--statistics", is_flag=True, help="Show statistical analysis")
+@click.option(
+    "--threshold",
+    type=float,
+    default=0.1,
+    help="Threshold for significant change (default: 0.1 = 10%)",
+)
+@click.option("--export", type=click.Path(), help="Export comparison to file (CSV/Excel)")
+def compare(**kwargs):
+    """Compare benchmark runs"""
+    console = Console()
+
+    if kwargs["run_ids"] and kwargs["last"] != 2:
+        console.print("[red]Error: Use either --run-ids or --last, not both[/red]")
+        return
+
+    if kwargs["run_ids"] is None:
+        kwargs["run_ids"] = []
+
+    storage = SQLiteStorage("results/benchmark_history.db")
+
+    if kwargs["run_ids"]:
+        run1_results = storage.custom_query(
+            f"SELECT * FROM benchmarks WHERE id={kwargs['run_ids'][0]}"
+        )
+        run2_results = storage.custom_query(
+            f"SELECT * FROM benchmarks WHERE id={kwargs['run_ids'][1]}"
+        )
+
+        if not run1_results or not run2_results:
+            console.print("[red]Error: One or both run IDs not found[/red]")
+            return
+
+        comparison_data = Comparison.compare_runs(run1_results, run2_results, kwargs["threshold"])
+    else:
+        all_results = storage.get_history(kwargs["last"] * 2)
+        if len(all_results) < 2:
+            console.print("[red]Error: Not enough benchmark runs to compare[/red]")
+            return
+
+        midpoint = len(all_results) // 2
+        run1_results = all_results[:midpoint]
+        run2_results = all_results[midpoint : midpoint * 2]
+
+        comparison_data = Comparison.compare_runs(run1_results, run2_results, kwargs["threshold"])
+
+    console.print(Panel("Run Comparison", style="blue"))
+    console.print(Comparison.format_comparison(comparison_data))
+
+    if kwargs["statistics"]:
+        stats1 = Statistics.calculate_basic(run1_results)
+        stats2 = Statistics.calculate_basic(run2_results)
+        console.print("\n" + Statistics.format_basic(stats1))
+        console.print("\n" + Statistics.format_basic(stats2))
+
+    if kwargs["export"]:
+        console.print(f"\n[yellow]Exporting comparison to {kwargs['export']}...[/yellow]")
+
+
+@main.command()
+@click.option(
+    "--test-type",
+    "test_type",
+    multiple=True,
+    type=click.Choice(["randread", "randwrite", "read", "write", "randrw", "trim"]),
+    help="Filter by test type",
+)
+@click.option(
+    "--block-size",
+    "block_size",
+    multiple=True,
+    type=click.Choice(["4k", "64k", "1M", "512k"]),
+    help="Filter by block size",
+)
+@click.option("--detailed", is_flag=True, help="Show detailed statistics")
+@click.option("--trends", is_flag=True, help="Show performance trends over time")
+@click.option("--plots", is_flag=True, help="Generate visualization plots")
+@click.option("--export", type=click.Path(), help="Export analysis to file")
+def analyze(**kwargs):
+    """Analyze historical benchmark data"""
+    console = Console()
+
+    storage = SQLiteStorage("results/benchmark_history.db")
+
+    query = "SELECT * FROM benchmarks WHERE 1=1"
+    params = []
+
+    if kwargs["test_type"]:
+        placeholders = ",".join(["?" for _ in kwargs["test_type"]])
+        query += f" AND test_type IN ({placeholders})"
+        params.extend(kwargs["test_type"])
+
+    if kwargs["block_size"]:
+        placeholders = ",".join(["?" for _ in kwargs["block_size"]])
+        query += f" AND block_size IN ({placeholders})"
+        params.extend(kwargs["block_size"])
+
+    results = storage.custom_query(query, params if params else ())
+
+    if not results:
+        console.print("[yellow]No results found matching filters[/yellow]")
+        return
+
+    if kwargs["detailed"]:
+        stats = Statistics.calculate_detailed(results)
+        console.print(Statistics.format_detailed(stats))
+    else:
+        stats = Statistics.calculate_basic(results)
+        console.print(Statistics.format_basic(stats))
+
+    if kwargs["trends"]:
+        console.print("\n[yellow]Trend analysis requires plot generation[/yellow]")
+        if kwargs["plots"]:
+            plotter = create_plotter(["line"], results, {})
+            plotter.generate()
+
+    if kwargs["plots"]:
+        plotter = create_plotter(["bar", "scatter", "radar"], results, {})
+        plotter.generate()
+        console.print("[green]Plots generated[/green]")
+
+    if kwargs["export"]:
+        console.print(f"\n[yellow]Exporting analysis to {kwargs['export']}...[/yellow]")
+
+
+@main.command()
+@click.option(
+    "--format",
+    "format",
+    type=click.Choice(["csv", "excel"]),
+    default="excel",
+    help="Export format",
+)
+@click.option("--output", type=click.Path(), required=True, help="Output file path")
+@click.option("--after", type=str, help="Filter by date after YYYY-MM-DD")
+@click.option("--before", type=str, help="Filter by date before YYYY-MM-DD")
+@click.option(
+    "--test-type",
+    "test_type",
+    multiple=True,
+    type=click.Choice(["randread", "randwrite", "read", "write", "randrw", "trim"]),
+    help="Filter by test type",
+)
+@click.option(
+    "--block-size",
+    "block_size",
+    multiple=True,
+    type=click.Choice(["4k", "64k", "1M", "512k"]),
+    help="Filter by block size",
+)
+def export(**kwargs):
+    """Export benchmark data to file"""
+    console = Console()
+
+    storage = SQLiteStorage("results/benchmark_history.db")
+
+    query = "SELECT * FROM benchmarks WHERE 1=1"
+    params = []
+
+    if kwargs["after"]:
+        query += " AND timestamp >= ?"
+        params.append(kwargs["after"])
+
+    if kwargs["before"]:
+        query += " AND timestamp <= ?"
+        params.append(kwargs["before"])
+
+    if kwargs["test_type"]:
+        placeholders = ",".join(["?" for _ in kwargs["test_type"]])
+        query += f" AND test_type IN ({placeholders})"
+        params.extend(kwargs["test_type"])
+
+    if kwargs["block_size"]:
+        placeholders = ",".join(["?" for _ in kwargs["block_size"]])
+        query += f" AND block_size IN ({placeholders})"
+        params.extend(kwargs["block_size"])
+
+    results = storage.custom_query(query, params if params else ())
+
+    if not results:
+        console.print("[yellow]No results found matching filters[/yellow]")
+        return
+
+    console.print(f"[green]Exporting {len(results)} results to {kwargs['output']}...[/green]")
+
+    if kwargs["format"] == "csv":
+        formatter = CsvFormatter(kwargs["output"])
+        formatter.format(results)
+    else:
+        formatter = ExcelFormatter(kwargs["output"])
+        formatter.format(results)
+
+    console.print("[green]Export complete[/green]")
