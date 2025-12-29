@@ -203,6 +203,123 @@ uv run disk-benchmark-py run --db-path /custom/path/benchmark.db
 uv run disk-benchmark-py run --output-format json --json-output-dir /custom/json/dir
 ```
 
+### Analyze Stored Data Without New Benchmarks
+
+You can generate plots, statistics, and comparisons from data already stored in the SQLite database without running new benchmarks. This is useful for:
+
+- Reviewing historical performance after multiple test runs
+- Creating visualizations of trends over time
+- Comparing different runs side-by-side
+- Exporting data for external analysis tools
+- Generating reports from stored benchmark results
+
+**Key Point**: All these commands work with the data in `results/benchmark_history.db` - no need to run FIO again!
+
+#### Analyze Historical Data
+
+```bash
+# Generate plots and statistics from all stored data
+uv run disk-benchmark-py analyze --plots
+
+# Detailed statistics for specific test type with plots
+uv run disk-benchmark-py analyze --test-type randread --detailed --plots
+
+# Filter by block size and generate plots
+uv run disk-benchmark-py analyze --block-size 4k 64k --plots
+
+# Show performance trends over time
+uv run disk-benchmark-py analyze --trends --plots
+
+# Export analysis to Excel
+uv run disk-benchmark-py analyze --export analysis.xlsx --plots
+```
+
+#### Compare Stored Runs
+
+```bash
+# Compare last 2 runs with plots
+uv run disk-benchmark-py compare --last 2 --plots
+
+# Compare specific run IDs with statistics and plots
+uv run disk-benchmark-py compare --run-ids 42 43 --statistics --plots
+
+# Compare with custom threshold (20%) and export
+uv run disk-benchmark-py compare --last 5 --threshold 0.2 --export comparison.xlsx
+```
+
+#### Export Data for External Tools
+
+```bash
+# Export all data to Excel with metric-organized sheets
+uv run disk-benchmark-py export --format excel --output all_results.xlsx
+
+# Export CSV for date range
+uv run disk-benchmark-py export --format csv --output 2024_q4.csv --after 2024-10-01 --before 2024-12-31
+
+# Export specific test types
+uv run disk-benchmark-py export --format excel --output randread_analysis.xlsx --test-type randread
+
+# Export and open in external tools
+uv run disk-benchmark-py export --format excel --output export.xlsx
+# Then use Excel, Python pandas, or other tools for further analysis
+```
+
+#### Query Database Directly
+
+```bash
+# View last 10 runs in table format
+uv run disk-benchmark-py run --history 10
+
+# Custom SQL queries for specific analysis
+uv run disk-benchmark-py run --query-sql "SELECT test_type, block_size, AVG(read_iops) as avg_iops FROM benchmarks GROUP BY test_type, block_size"
+
+# Find best performance
+uv run disk-benchmark-py run --query-sql "SELECT * FROM benchmarks ORDER BY read_iops DESC LIMIT 10"
+```
+
+#### Generate Plots From Stored Data
+
+The `analyze` and `compare` commands both support the `--plots` flag:
+
+```bash
+# Analyze and generate all plot types (bar, scatter, radar)
+uv run disk-benchmark-py analyze --plots
+
+# Compare runs with comparison plots
+uv run disk-benchmark-py compare --last 3 --plots
+
+# Select specific plot types
+uv run disk-benchmark-py analyze --plots --plot-types bar,scatter
+
+# Open plots in browser automatically
+uv run disk-benchmark-py analyze --plots --open-browser
+```
+
+**Plot files are saved** to `results/plots/` as interactive HTML files:
+- `bar_iops.html` - IOPS comparison by test type and block size
+- `bar_bandwidth.html` - Bandwidth comparison
+- `scatter_iops_latency.html` - IOPS vs latency correlation
+- `radar_performance.html` - Performance profile across test types
+- All plots are interactive: hover for details, zoom, pan, legend filtering
+
+#### Example Workflow
+
+```bash
+# Step 1: Run benchmarks over time (multiple runs)
+uv run disk-benchmark-py run --mode lean
+uv run disk-benchmark-py run --mode lean
+uv run disk-benchmark-py run --mode lean
+
+# Step 2: Generate plots from all stored data (no new benchmarks)
+uv run disk-benchmark-py analyze --plots --open-browser
+
+# Step 3: Compare specific runs to see performance changes
+uv run disk-benchmark-py compare --last 2 --statistics --plots
+
+# Step 4: Export data for custom analysis
+uv run disk-benchmark-py export --format excel --output my_analysis.xlsx
+```
+
 #### Test Command: `disk-benchmark-py test`
 
 Quick validation mode:
