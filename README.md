@@ -1,125 +1,172 @@
+# Disk I/O Benchmarking Tools
 
-# Benchmarking file I/O
+Collection of disk I/O benchmarking tools for Linux and macOS using fio.
 
-This script benchmarks disk I/O performance using the fio tool, supporting various test modes and configurations.
+## Tools
 
-Details are discussed in a blog post: [ZFS performance tuning](https://martin.heiland.io/2018/02/23/zfs-tuning/index.html)
+- **[Bash Implementation](README_BASH.md)** - `fio_benchmark.sh`
+  - Lightweight, requires only bash and fio
+  - Ideal for systems without Python
+  - Text output, ASCII summary tables
 
-Originally, four tests are run for the block sizes {4k, 64k, 1M}: random read, random write, sequential read, and sequential write. The script has been enhanced with additional modes for comprehensive evaluation.
+- **[Python Implementation](README_PYTHON.md)** - `disk-benchmark-py`
+  - Feature-rich, extensible Python implementation
+  - Multiple storage backends (SQLite, JSON)
+  - Rich terminal output with tables and colors
+  - Queryable benchmark history
 
-## Enhanced Features
+## Quick Start
 
-The script now includes additional lean tests for more comprehensive disk performance evaluation:
+### Bash (Minimal Requirements)
 
-- **Direct I/O**: All tests bypass the OS cache for raw disk performance.
-- **Latency Tracking**: Added to 4k random read and 1M sequential read tests to measure response times.
-- **Mixed Random Read/Write**: A new test with 70% read / 30% write at 4k block size, run for 60 seconds.
-- **Trim Test**: For SSDs only (enabled with --ssd flag), tests garbage collection at 4k block size. **Note: TRIM only works on block devices, not regular files.** If run on a regular file (default behavior), the test will be skipped with a warning message.
-- **High Concurrency**: Optional (enabled with --concurrency flag), increases jobs to 4 and I/O depth to 16 on the 64k random read test.
-
-## Usage
-
-The script supports lean, full, test, and individual test modes:
-
-- **Lean Mode (Default)**: Runs original tests with enhancements (direct I/O, latency, mixed RandRW, optional trim/concurrency). Lean tests use shorter runtimes (60s) for efficiency. Total runtime ~1-1.25 hours.
-- **Full Mode**: Adds comprehensive tests with full runtimes (300s for lean additions) and extra block sizes (512k). Total runtime ~2-3 hours.
-- **Test Mode**: Runs partial core tests (4k randread, 64k randwrite, 1M read) with 15s runtime for quick validation. Total runtime ~1 minute.
-- **Individual Test Mode**: Run specific test types on selected block sizes. Useful for targeted performance analysis.
-
-Run script with optional flags:
-
-**Preset modes:**
-- `bash fio_benchmark.sh`: Lean mode (HDD, no concurrency).
-- `bash fio_benchmark.sh --full`: Full mode with additional tests.
-- `bash fio_benchmark.sh --test`: Test mode (15s runtime, partial core tests for quick validation).
-- `bash fio_benchmark.sh --quick`: Quick mode (1G file size, 15s runtime per test). Useful for fast testing.
-
-**Test type modifiers:**
-- `bash fio_benchmark.sh --ssd`: Enable SSD-specific tests (e.g., trim).
-- `bash fio_benchmark.sh --concurrency`: Enable high concurrency on select tests.
-- `bash fio_benchmark.sh --full --ssd --concurrency`: Combine for comprehensive SSD testing.
-
-**Individual test flags (mutually exclusive with --test and --full):**
-
-Test types:
-- `--randread`: Random read tests
-- `--randwrite`: Random write tests
-- `--read`: Sequential read tests
-- `--write`: Sequential write tests
-- `--randrw`: Mixed random read/write (70/30 split) tests
-- `--trim`: Trim tests (requires --ssd)
-
-Block sizes:
-- `--4k`: Run tests with 4k block size
-- `--64k`: Run tests with 64k block size
-- `--1M`: Run tests with 1M block size
-- `--512k`: Run tests with 512k block size
-
-**Individual test examples:**
 ```bash
-# Run random read on 4k and 64k
-bash fio_benchmark.sh --randread --4k --64k
+./fio_benchmark.sh --test
+```
 
-# Run sequential read and write on 1M
-bash fio_benchmark.sh --read --write --1M
+### Python (Full Features)
 
-# Run mixed random read/write tests on all block sizes
-bash fio_benchmark.sh --randrw --4k --64k --1M --512k
+```bash
+# Install dependencies
+uv sync
 
-# Run trim test with SSD flag
-bash fio_benchmark.sh --trim --4k --ssd
+# Run benchmark
+uv run disk-benchmark-py run --mode test
+```
 
-# Run multiple test types with concurrency
-bash fio_benchmark.sh --randread --randwrite --4k --64k --concurrency
+## Feature Comparison
 
-# Quick test mode (small file size, short runtime)
-bash fio_benchmark.sh --quick --randread --4k
+| Feature | Bash | Python |
+|---------|-------|--------|
+| Test Modes | test, lean, full, individual | ✓ Same |
+| Test Types | 6 types (randread, randwrite, read, write, randrw, trim) | ✓ Same |
+| Block Sizes | 4 sizes (4k, 64k, 1M, 512k) | ✓ Same |
+| Progress | ASCII bar | ✓ Rich progress bars |
+| Output | Text + ASCII table | ✓ Table/JSON/CSV formats |
+| Storage | Text files only | ✓ SQLite database + JSON files |
+| History | Manual file review | ✓ Queryable history (last N runs, custom SQL) |
+| Error Handling | Basic | ✓ Detailed messages |
+| macOS Support | ✓ | ✓ (with psync engine) |
+| Dependencies | bash, fio | Python 3.10+, uv, fio |
+| Extensibility | Hard | ✓ Easy to extend |
 
-# Custom file size (500M instead of default 10G)
-bash fio_benchmark.sh --filesize 500M --randread --4k
+## Installation
+
+### Prerequisites
+
+Both tools require `fio` to be installed on your system:
+
+**macOS:**
+```bash
+brew install fio
+```
+
+**Linux:**
+```bash
+# Debian/Ubuntu
+sudo apt-get install fio
+
+# RHEL/CentOS
+sudo yum install fio
+```
+
+### Python Tool Setup
+
+```bash
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone repository and install dependencies
+cd /path/to/disk_io_bm
+uv sync
+```
+
+## Usage Examples
+
+### Bash Tool
+
+```bash
+# Quick test
+./fio_benchmark.sh --test
+
+# Full mode with SSD tests
+./fio_benchmark.sh --full --ssd --concurrency
+
+# Individual tests
+./fio_benchmark.sh --randread --4k --64k --1M --concurrency
 
 # Quick test with custom file size
-bash fio_benchmark.sh --quick --filesize 500M --randread --4k
+./fio_benchmark.sh --quick --filesize 500M --randread --4k
 ```
 
-**Notes:**
-- Individual test flags must be combined with at least one block size flag
-- Trim tests only support 4k block size
-- **TRIM requires block device, not regular files.** When run on a regular file (default), the test will be skipped with a warning in the Status column
-- Individual tests create separate output files: `bm_<type>_<size>_individual.txt`
-- Progress bar is disabled in individual test mode; elapsed and estimated remaining time are shown
-- Use `--quick` flag for fast testing (1G file, 15s runtime)
-- Use `--filesize <size>` to specify custom file size (e.g., `--filesize 500M` for faster tests)
+### Python Tool
 
-**Note**: On macOS, ensure `fio` is installed (e.g., via Homebrew). Summary parsing is optimized for macOS fio output; use `--test` for quick checks.
+```bash
+# Quick test
+uv run disk-benchmark-py test
 
-The script displays dynamic progress updates during execution, including an ASCII progress bar, current test name, elapsed time (HH:MM:SS), and estimated remaining time. Updates occur every ~10 seconds.
+# Lean mode (default)
+uv run disk-benchmark-py run
 
-Note: In some terminals (e.g., iTerm2), intermediate progress updates may appear in the scrollback history after tests complete. This is expected behavior—the progress line is properly overwritten during execution and cleared when all tests finish.
+# Full mode with SQLite storage
+uv run disk-benchmark-py run --mode full --database sqlite
 
-## Output Directory
+# View recent history
+uv run disk-benchmark-py run --history 10
 
-All benchmark results are saved to the `results/` subdirectory by default. This keeps the project directory clean and makes it easy to manage test results.
+# Custom SQL query
+uv run disk-benchmark-py run --query-sql "SELECT * FROM benchmarks WHERE test_type='read' ORDER BY timestamp DESC LIMIT 5"
 
-### Output Files
-
-- `bm_*.txt` - Detailed benchmark output per test type
-- `summary.txt` - Aggregated summary of all tests
-- `*.bak` - Timestamped backups of previous results
-- `bm_*_individual.txt` - Individual test output files
-
-The `results/` directory is ignored by git, so results are not versioned. The `tmp_test` temporary file remains in the project root directory during test execution and is cleaned up after each test.
-
-Results are saved to bm_*.txt files.
-
-## Summary Output
-
-After running tests, the script automatically generates a summary of core metrics (IOPS, bandwidth, latency, CPU) in a table format. The summary is displayed on the console and saved to `summary.txt`. If the `column` tool is installed, the table is aligned; otherwise, a basic format is used.
-
-Example output:
+# JSON output
+uv run disk-benchmark-py run --output-format json
 ```
-Test          IOPS Read  IOPS Write  BW Read    BW Write   Lat Avg Read (us)  Lat Avg Write (us)  CPU
-randread 4k   15000      N/A         58.5MB/s   N/A        50.0               N/A                 usr=10.0% sys=5.0%
-randwrite 64k N/A        12000       N/A        46.7MB/s   N/A                70.0               usr=12.0% sys=6.0%
-...
+
+## Output
+
+Both tools save results to `results/` directory:
+
+### Bash Output
+- `bm_*.txt` - Raw FIO output per test
+- `summary.txt` - Formatted ASCII table
+- `*.bak` - Timestamped backups
+
+### Python Output
+- `benchmark_history.db` - SQLite database
+- `results/json/` - Individual JSON files
+- `results/*.json` - Aggregated JSON exports
+- Console - Rich-formatted tables
+
+## Development
+
+### Python Tool
+
+```bash
+# Run tests
+uv run pytest tests/ -v
+
+# Run linting
+uv run ruff check cli.py src/
+
+# Run type checking
+uv run mypy cli.py --config-file=pyproject.toml
 ```
+
+## Choosing Between Tools
+
+### Use Bash (`fio_benchmark.sh`) when:
+- System has no Python 3.10+ installed
+- Need minimal dependencies
+- Want simple, portable tool
+- Quick one-time benchmarks
+
+### Use Python (`disk-benchmark-py`) when:
+- Want rich, formatted output
+- Need historical data analysis
+- Want to query and compare benchmark results
+- Need multiple output formats (JSON, CSV)
+- Running regular benchmarks over time
+- Want to extend functionality with custom features
+- On macOS (automatic psync engine support)
+
+## License
+
+This project is provided as-is for disk I/O benchmarking purposes.

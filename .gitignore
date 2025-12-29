@@ -1,2 +1,22 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Results
 results/
 *.bak
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo

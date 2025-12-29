@@ -1,0 +1,157 @@
+"""CLI with auto-detection for disk I/O benchmarking"""
+
+import click
+from src.config import BenchmarkConfig, StorageBackend
+
+
+@click.group()
+def disk_benchmark():
+    """Disk I/O benchmarking tool"""
+    pass
+
+
+@disk_benchmark.command()
+@click.option(
+    "--mode",
+    type=click.Choice(["test", "lean", "full", "individual"]),
+    help="Test mode (auto-detected if not specified)",
+)
+@click.option("--ssd", is_flag=True, help="Enable SSD-specific tests")
+@click.option("--concurrency", is_flag=True, help="High concurrency mode")
+@click.option(
+    "--test-type",
+    "test-type",
+    multiple=True,
+    type=click.Choice(["randread", "randwrite", "read", "write", "randrw", "trim"]),
+    help="Individual test types",
+)
+@click.option(
+    "--block-size",
+    "block-size",
+    multiple=True,
+    type=click.Choice(["4k", "64k", "1M", "512k"]),
+    help="Block sizes for individual tests",
+)
+@click.option("--runtime", type=int, default=300, help="Test runtime in seconds")
+@click.option("--filesize", type=str, default="10G", help="File size for fio")
+@click.option(
+    "--output-dir", type=click.Path, default="results", help="Output directory"
+)
+@click.option(
+    "--output-format",
+    type=click.Choice(["table", "json", "csv"]),
+    default="table",
+    help="Output format (table/json/csv)",
+)
+@click.option(
+    "--json-output-dir",
+    type=click.Path,
+    default="results/json",
+    help="Directory for JSON output files (individual tests)",
+)
+@click.option(
+    "--database",
+    type=click.Choice(["none", "sqlite"]),
+    default="sqlite",
+    help="Storage backend (none/sqlite)",
+)
+@click.option(
+    "--db-path",
+    type=click.Path,
+    default="results/benchmark_history.db",
+    help="Path to SQLite database file",
+)
+@click.option("--plots", is_flag=True, help="Generate plots")
+@click.option(
+    "--plot-types",
+    "plot-types",
+    multiple=True,
+    type=click.Choice(["bar", "line", "heatmap", "scatter", "box", "radar"]),
+    default=["bar"],
+    help="Plot types to generate",
+)
+@click.option(
+    "--plot-output-dir",
+    type=click.Path,
+    default="results/plots",
+    help="Directory for plot files",
+)
+@click.option("--interactive-plots", is_flag=True, help="Open plots in browser")
+@click.option("--history", type=int, default=10, help="Show N recent benchmark runs")
+@click.pass_context
+def main(
+    ctx,
+    mode,
+    ssd,
+    concurrency,
+    test_type,
+    block_size,
+    runtime,
+    filesize,
+    output_dir,
+    output_format,
+    json_output_dir,
+    database,
+    db_path,
+    plots,
+    plot_types,
+    plot_output_dir,
+    interactive_plots,
+    history,
+):
+    """Run disk I/O benchmarks with fio"""
+    from src.executor import BenchmarkExecutor
+    from src.storage import SQLiteStorage, JsonStorage
+    from src.formatters import TableFormatter, JsonFormatter
+    from rich.console import Console
+
+    console = Console()
+
+    # Create configuration
+    config = BenchmarkConfig(
+        mode=mode,
+        ssd=ssd,
+        concurrency=concurrency,
+        test_types=list(test_type),
+        block_sizes=list(block_size),
+        runtime=runtime,
+        filesize=filesize,
+        results_dir=output_dir,
+        output_format=output_format,
+        json_output_dir=json_output_dir,
+        generate_plots=plots,
+        plot_types=list(plot_types),
+        plot_output_dir=plot_output_dir,
+        interactive_plots=interactive_plots,
+    )
+
+    # Override database config
+    if database == "none":
+        database_backend = StorageBackend.NONE
+    else:
+        database_backend = StorageBackend.SQLITE
+
+    executor = BenchmarkExecutor(config)
+    results = executor.run_all_tests()
+
+    # Store results
+    if database_backend != StorageBackend.NONE:
+        if database_backend == StorageBackend.SQLITE:
+            storage = SQLiteStorage(db_path)
+        else:
+            storage = JsonStorage(output_dir)
+        storage.save_results(results, config)
+    else:
+        # In-memory for no database
+        pass
+
+    # Format and display output
+    if output_format == "table":
+        formatter = TableFormatter()
+        formatter.format(results)
+    elif output_format == "json":
+        formatter = JsonFormatter(json_output_dir)
+        formatter.format(results)
+
+    console.print("Benchmark completed!")
+    console.print(f"Results saved to {output_dir}/")
