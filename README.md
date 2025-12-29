@@ -45,7 +45,7 @@ uv run disk-benchmark-py run --mode test
 | Storage | Text files only | SQLite database + JSON files |
 | History | Manual file review | Queryable history (last N runs, custom SQL) |
 | Error Handling | Basic | Detailed messages |
-| macOS Support | | (with psync engine) |
+| macOS Support | Yes | (with psync engine) |
 | Dependencies | bash, fio | Python 3.10+, uv, fio |
 | Extensibility | Hard | Easy to extend |
 

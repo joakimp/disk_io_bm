@@ -552,7 +552,7 @@ brew install fio
 | Plot Generation | N/A | Interactive Plotly plots |
 | Analytics | N/A | Statistics and comparison |
 | Error Handling | Basic | Detailed messages |
-| macOS Support | | (with psync engine) |
+| macOS Support | Yes | (with psync engine) |
 | Extensibility | Hard | Easy to extend |
 | Dependencies | bash, fio | Python 3.10+, uv, fio |
 | Dependencies | bash, fio | Python 3.10+, uv, fio |
