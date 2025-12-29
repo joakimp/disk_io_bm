@@ -71,9 +71,7 @@ def main():
 @click.option(
     "--plot-output-dir", type=click.Path(), default="results/plots", help="Directory for plot files"
 )
-@click.option(
-    "--interactive-plots", is_flag=True, help="Generate interactive plots and open in browser"
-)
+@click.option("--open-browser", is_flag=True, help="Open plots in browser after generation")
 @click.option(
     "--db-path",
     "db_path",
@@ -110,7 +108,7 @@ def run(**kwargs):
         "generate_plots": kwargs["plots"],
         "plot_types": list(kwargs["plot_types"]),
         "plot_output_dir": kwargs["plot_output_dir"],
-        "interactive_plots": kwargs["interactive_plots"],
+        "interactive_plots": kwargs["open_browser"],
     }
 
     # Quick mode overrides
@@ -193,7 +191,10 @@ def run(**kwargs):
 
                 for plot_file in glob(str(config.plot_output_dir) + "/*.html"):
                     console.print(f"[green]Opening {plot_file} in browser...[/green]")
-                    plotter.open_in_browser(plot_file)
+                    success = plotter.open_in_browser(plot_file)
+                    if not success:
+                        console.print(f"[yellow]Browser open failed for {plot_file}[/yellow]")
+                        console.print(f"[dim]File saved at: {plot_file}[/dim]")
 
             console.print(f"[green]Plots saved to {config.plot_output_dir}/[/green]")
         except ImportError as e:

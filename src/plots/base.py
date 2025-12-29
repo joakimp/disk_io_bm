@@ -25,6 +25,15 @@ class BasePlotter(ABC):
         """Save plot to file"""
         pass
 
-    def open_in_browser(self, filepath: str) -> None:
-        """Open HTML file in default browser"""
-        webbrowser.open(f"file://{Path(filepath).absolute()}")
+    def open_in_browser(self, filepath: str) -> bool:
+        """Open HTML file in default browser
+
+        Returns:
+            bool: True if successful, False if failed
+        """
+        try:
+            webbrowser.open(f"file://{Path(filepath).absolute()}")
+            return True
+        except Exception as e:
+            print(f"Warning: Could not open browser: {e}")
+            return False

@@ -172,7 +172,7 @@ uv run disk-benchmark-py run --plots
 uv run disk-benchmark-py run --plots --plot-types bar,scatter
 
 # Generate plots and open in browser
-uv run disk-benchmark-py run --plots --interactive-plots
+uv run disk-benchmark-py run --plots --open-browser
 
 # Generate plots with custom output directory
 uv run disk-benchmark-py run --plots --plot-output-dir /custom/plots

@@ -54,7 +54,7 @@ class BenchmarkConfig:
     generate_plots: bool = False
     plot_types: List[str] = field(default_factory=list)
     plot_output_dir: str = "results/plots"
-    interactive_plots: bool = False
+    open_browser: bool = False
 
     # Database
     database: StorageBackend = StorageBackend.SQLITE
