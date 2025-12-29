@@ -37,17 +37,17 @@ uv run disk-benchmark-py run --mode test
 
 | Feature | Bash | Python |
 |---------|-------|--------|
-| Test Modes | test, lean, full, individual | ✓ Same |
-| Test Types | 6 types (randread, randwrite, read, write, randrw, trim) | ✓ Same |
-| Block Sizes | 4 sizes (4k, 64k, 1M, 512k) | ✓ Same |
-| Progress | ASCII bar | ✓ Rich progress bars |
-| Output | Text + ASCII table | ✓ Table/JSON/CSV formats |
-| Storage | Text files only | ✓ SQLite database + JSON files |
-| History | Manual file review | ✓ Queryable history (last N runs, custom SQL) |
-| Error Handling | Basic | ✓ Detailed messages |
-| macOS Support | ✓ | ✓ (with psync engine) |
+| Test Modes | test, lean, full, individual | Same |
+| Test Types | 6 types (randread, randwrite, read, write, randrw, trim) | Same |
+| Block Sizes | 4 sizes (4k, 64k, 1M, 512k) | Same |
+| Progress | ASCII bar | Rich progress bars |
+| Output | Text + ASCII table | Table/JSON/CSV formats |
+| Storage | Text files only | SQLite database + JSON files |
+| History | Manual file review | Queryable history (last N runs, custom SQL) |
+| Error Handling | Basic | Detailed messages |
+| macOS Support | | (with psync engine) |
 | Dependencies | bash, fio | Python 3.10+, uv, fio |
-| Extensibility | Hard | ✓ Easy to extend |
+| Extensibility | Hard | Easy to extend |
 
 ## Installation
 

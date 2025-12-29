@@ -541,19 +541,19 @@ brew install fio
 
 | Feature | Bash | Python |
 |---------|-------|--------|
-| Test Modes | test, lean, full, individual | ✓ Same |
-| Test Types | 6 types | ✓ Same |
-| Block Sizes | 4 sizes | ✓ Same |
-| Flags | --ssd, --hdd, --concurrency, --quick, --filesize | ✓ Same |
-| Progress | ASCII bar | ✓ Rich progress bars |
-| Output | Text + ASCII table | ✓ Table/JSON/CSV |
-| Storage | Text files only | ✓ SQLite database + JSON + CSV files |
-| History | Manual file review | ✓ Queryable history (SQL) |
-| Plot Generation | N/A | ✓ Interactive Plotly plots |
-| Analytics | N/A | ✓ Statistics and comparison |
-| Error Handling | Basic | ✓ Detailed messages |
-| macOS Support | ✓ | ✓ (with psync engine) |
-| Extensibility | Hard | ✓ Easy to extend |
+| Test Modes | test, lean, full, individual | Same |
+| Test Types | 6 types | Same |
+| Block Sizes | 4 sizes | Same |
+| Flags | --ssd, --hdd, --concurrency, --quick, --filesize | Same |
+| Progress | ASCII bar | Rich progress bars |
+| Output | Text + ASCII table | Table/JSON/CSV |
+| Storage | Text files only | SQLite database + JSON + CSV files |
+| History | Manual file review | Queryable history (SQL) |
+| Plot Generation | N/A | Interactive Plotly plots |
+| Analytics | N/A | Statistics and comparison |
+| Error Handling | Basic | Detailed messages |
+| macOS Support | | (with psync engine) |
+| Extensibility | Hard | Easy to extend |
 | Dependencies | bash, fio | Python 3.10+, uv, fio |
 | Dependencies | bash, fio | Python 3.10+, uv, fio |
 
