@@ -69,7 +69,7 @@ def main():
     help="Plot types to generate",
 )
 @click.option(
-    "--plot-output-dir", type=click.Path, default="results/plots", help="Directory for plot files"
+    "--plot-output-dir", type=click.Path(), default="results/plots", help="Directory for plot files"
 )
 @click.option(
     "--interactive-plots", is_flag=True, help="Generate interactive plots and open in browser"
