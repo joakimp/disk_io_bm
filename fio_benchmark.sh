@@ -224,9 +224,9 @@ do_disk_test () {
 	    if [ "$INDIVIDUAL_TESTS" = false ]; then
 	        progress=$((current_test * 20 / total_tests))
 	        bar=$(printf '%*s' "$progress" '' | tr ' ' '#'; printf '%*s' "$((20 - progress))" '' | tr ' ' ' ')
-	        msg="Progress: [$bar] $((current_test * 100 / total_tests))% | Running: $current_test_name | Elapsed: $(format_time $elapsed) | Remaining: ~$(format_time $remaining)"
-	    else
-	        msg="Running: $current_test_name | Elapsed: $(format_time $elapsed) | Remaining: ~$(format_time $remaining)"
+ 	    msg="Progress: [$bar] $((current_test * 100 / total_tests))% | Running: $current_test_name | Elapsed: $(format_time $elapsed) | Remaining: ~$(format_time $remaining) (approximate)"
+ 	    else
+ 	        msg="Running: $current_test_name | Elapsed: $(format_time $elapsed) | Remaining: ~$(format_time $remaining) (approximate)"
 	    fi
 	    printf "%s\r" "$msg" >&2
 	    sleep 10
@@ -243,9 +243,9 @@ summarize_results() {
     echo "Generating summary..." >&2
 
     local data=()
-    data+=("Test|IOPS Read|IOPS Write|BW Read|BW Write|Lat Avg Read (us)|Lat Avg Write (us)|CPU")
+    data+=("Test|IOPS Read|IOPS Write|BW Read|BW Write|Lat Avg Read (us)|Lat Avg Write (us)|CPU|Runtime")
 
-    for file in "${BASEDIR}"/bm_*.txt; do
+    for file in "${BASEDIR}"/bm_*.txt "${BASEDIR}"/bm_*_individual.txt; do
         [ -f "$file" ] || continue
 
         # Collect actual tests present in file
@@ -281,25 +281,50 @@ summarize_results() {
             local read_lat="N/A"
             local write_lat="N/A"
             local cpu="N/A"
+            local runtime="N/A"
 
             if [ "$test_type" != "trim" ]; then
+                # Extract runtime (format: run=300098-300098msec)
+                local test_runtime_ms=$(grep -A 50 "This is $test_type" "$file" | grep "run=" | head -1 | sed 's/.*run=\([0-9]*\)-[0-9]*msec.*/\1/')
+                if [ -n "$test_runtime_ms" ]; then
+                    local runtime_sec=$((test_runtime_ms / 1000))
+                    local hours=$((runtime_sec / 3600))
+                    local minutes=$(((runtime_sec % 3600) / 60))
+                    local seconds=$((runtime_sec % 60))
+                    if [ $hours -gt 0 ]; then
+                        runtime=$(printf "%02d:%02d:%02d" $hours $minutes $seconds)
+                    else
+                        runtime=$(printf "%02d:%02d" $minutes $seconds)
+                    fi
+                fi
+
                 # Extract IOPS
                 local iops=$(grep -A 50 "This is $test_type" "$file" | grep "IOPS=" | head -1 | sed 's/.*IOPS=\([0-9.k]*\).*/\1/')
-                if [[ "$test_type" == randread ]] || [[ "$test_type" == read ]]; then
+                if [[ "$test_type" == randrw ]]; then
+                    # Special handling for randrw - extract both read and write metrics
+                    read_iops=$(grep "read:" "$file" | grep "IOPS=" | head -1 | sed 's/.*IOPS=\([0-9.]*\).*/\1/')
+                    write_iops=$(grep "write:" "$file" | grep "IOPS=" | head -1 | sed 's/.*IOPS=\([0-9.]*\).*/\1/')
+                elif [[ "$test_type" == randread ]] || [[ "$test_type" == read ]]; then
                     read_iops=$iops
                 elif [[ "$test_type" == randwrite ]] || [[ "$test_type" == write ]]; then
                     write_iops=$iops
                 fi
 
                 # Extract BW
-                if [[ "$test_type" == randread ]] || [[ "$test_type" == read ]]; then
+                if [[ "$test_type" == randrw ]]; then
+                    read_bw=$(grep "read:" "$file" | grep "BW=" | head -1 | sed 's/.*BW=\([^)]*\).*/\1/' | cut -d' ' -f1)
+                    write_bw=$(grep "write:" "$file" | grep "BW=" | head -1 | sed 's/.*BW=\([^)]*\).*/\1/' | cut -d' ' -f1)
+                elif [[ "$test_type" == randread ]] || [[ "$test_type" == read ]]; then
                     read_bw=$(grep -A 50 "This is $test_type" "$file" | grep "read:" | sed 's/.*BW=\([^)]*\).*/\1/' | head -1 | cut -d' ' -f1)
                 elif [[ "$test_type" == randwrite ]] || [[ "$test_type" == write ]]; then
                     write_bw=$(grep -A 50 "This is $test_type" "$file" | grep "write:" | sed 's/.*BW=\([^)]*\).*/\1/' | head -1 | cut -d' ' -f1)
                 fi
 
                 # Extract Lat
-                if [[ "$test_type" == randread ]] || [[ "$test_type" == read ]]; then
+                if [[ "$test_type" == randrw ]]; then
+                    read_lat=$(grep "read:" "$file" -A 20 | grep "clat" | head -1 | sed 's/.*avg=\([0-9.]*\).*/\1/')
+                    write_lat=$(grep "write:" "$file" -A 20 | grep "clat" | head -1 | sed 's/.*avg=\([0-9.]*\).*/\1/')
+                elif [[ "$test_type" == randread ]] || [[ "$test_type" == read ]]; then
                     read_lat=$(grep -A 50 "This is $test_type" "$file" | grep "read:" -A 20 | grep "clat" | sed 's/.*avg=\([0-9.]*\).*/\1/' | head -1)
                 elif [[ "$test_type" == randwrite ]] || [[ "$test_type" == write ]]; then
                     write_lat=$(grep -A 50 "This is $test_type" "$file" | grep "write:" -A 20 | grep "clat" | sed 's/.*avg=\([0-9.]*\).*/\1/' | head -1)
@@ -316,8 +341,9 @@ summarize_results() {
             [ -z "$read_lat" ] && read_lat="N/A"
             [ -z "$write_lat" ] && write_lat="N/A"
             [ -z "$cpu" ] && cpu="N/A"
+            [ -z "$runtime" ] && runtime="N/A"
 
-            data+=("$test|$read_iops|$write_iops|$read_bw|$write_bw|$read_lat|$write_lat|$cpu")
+            data+=("$test|$read_iops|$write_iops|$read_bw|$write_bw|$read_lat|$write_lat|$cpu|$runtime")
         done
     done
 
@@ -328,6 +354,36 @@ summarize_results() {
     fi
     echo "$table"
     echo "$table" > "$summary_file"
+
+    # Calculate total runtime from all test files
+    local total_runtime_seconds=0
+    for file in "${BASEDIR}"/bm_*.txt "${BASEDIR}"/bm_*_individual.txt; do
+        [ -f "$file" ] || continue
+        local test_runtime_ms=$(grep "run=" "$file" | head -1 | sed 's/.*run=\([0-9]*\)-[0-9]*msec.*/\1/')
+        if [ -n "$test_runtime_ms" ]; then
+            total_runtime_seconds=$((total_runtime_seconds + test_runtime_ms / 1000))
+        fi
+    done
+
+    # Format total runtime
+    local total_hours=$((total_runtime_seconds / 3600))
+    local total_minutes=$(((total_runtime_seconds % 3600) / 60))
+    local total_seconds=$((total_runtime_seconds % 60))
+    local total_display
+    if [ $total_hours -gt 0 ]; then
+        total_display=$(printf "%02d:%02d:%02d" $total_hours $total_minutes $total_seconds)
+    else
+        total_display=$(printf "%02d:%02d" $total_minutes $total_seconds)
+    fi
+
+    # Add timestamp, total runtime, and note to summary
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "" | tee -a "$summary_file"
+    echo "Test completed: $timestamp" | tee -a "$summary_file"
+    echo "Total runtime: $total_display" | tee -a "$summary_file"
+    echo "" | tee -a "$summary_file"
+    echo "Note: Runtime values are approximate estimates. Actual times may vary based on disk performance and system load." | tee -a "$summary_file"
+
     echo "Summary saved to $summary_file" >&2
 }
 
