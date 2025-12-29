@@ -84,6 +84,19 @@ The script displays dynamic progress updates during execution, including an ASCI
 
 Note: In some terminals (e.g., iTerm2), intermediate progress updates may appear in the scrollback history after tests complete. This is expected behavior—the progress line is properly overwritten during execution and cleared when all tests finish.
 
+## Output Directory
+
+All benchmark results are saved to the `results/` subdirectory by default. This keeps the project directory clean and makes it easy to manage test results.
+
+### Output Files
+
+- `bm_*.txt` - Detailed benchmark output per test type
+- `summary.txt` - Aggregated summary of all tests
+- `*.bak` - Timestamped backups of previous results
+- `bm_*_individual.txt` - Individual test output files
+
+The `results/` directory is ignored by git, so results are not versioned. The `tmp_test` temporary file remains in the project root directory during test execution and is cleaned up after each test.
+
 Results are saved to bm_*.txt files.
 
 ## Summary Output

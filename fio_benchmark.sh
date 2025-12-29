@@ -17,22 +17,26 @@ TESTNAME=disk_test
 # Store results according to this
 BASEDIR="$(pwd)"
 
+# Create results directory for all output files
+RESULTS_DIR="${BASEDIR}/results"
+mkdir -p "${RESULTS_DIR}"
+
 # Backup existing output files
 timestamp=$(date +%Y%m%d_%H%M%S)
-rm -f "${BASEDIR}"/*.bak 2>/dev/null
-for file in "${BASEDIR}"/bm_*.txt "${BASEDIR}"/summary.txt; do
+rm -f "${RESULTS_DIR}"/*.bak 2>/dev/null
+for file in "${RESULTS_DIR}"/bm_*.txt "${RESULTS_DIR}"/summary.txt; do
     if [ -f "$file" ]; then
         mv "$file" "${file}.${timestamp}.bak"
     fi
 done
-
+ 
 # Clean previous output files
-rm -f "${BASEDIR}"/bm_*.txt "${BASEDIR}"/summary.txt
-
-OFNAME1="${BASEDIR}/bm_4k.txt"
-OFNAME2="${BASEDIR}/bm_64k.txt"
-OFNAME3="${BASEDIR}/bm_1M.txt"
-OFNAME4="${BASEDIR}/bm_512k.txt"
+rm -f "${RESULTS_DIR}"/bm_*.txt "${RESULTS_DIR}"/summary.txt
+ 
+OFNAME1="${RESULTS_DIR}/bm_4k.txt"
+OFNAME2="${RESULTS_DIR}/bm_64k.txt"
+OFNAME3="${RESULTS_DIR}/bm_1M.txt"
+OFNAME4="${RESULTS_DIR}/bm_512k.txt"
 
 # Flag parsing (support both short and long options)
 SSD=false
@@ -239,13 +243,13 @@ do_disk_test () {
 }
 
 summarize_results() {
-    local summary_file="${BASEDIR}/summary.txt"
+    local summary_file="${RESULTS_DIR}/summary.txt"
     echo "Generating summary..." >&2
-
+ 
     local data=()
     data+=("Test|IOPS Read|IOPS Write|BW Read|BW Write|Lat Avg Read (us)|Lat Avg Write (us)|CPU|Runtime")
-
-    for file in "${BASEDIR}"/bm_*.txt "${BASEDIR}"/bm_*_individual.txt; do
+ 
+    for file in "${RESULTS_DIR}"/bm_*.txt "${RESULTS_DIR}"/bm_*_individual.txt; do
         [ -f "$file" ] || continue
 
         # Collect actual tests present in file
@@ -410,7 +414,7 @@ run_individual_tests() {
                     fi
 
                     # Generate unique output filename
-                    local output_file="${BASEDIR}/bm_${test_type}_${block_size}_individual.txt"
+                    local output_file="${RESULTS_DIR}/bm_${test_type}_${block_size}_individual.txt"
 
                     # Set test name and description
                     if [ "$test_type" = "randrw" ]; then
@@ -490,12 +494,12 @@ elif [ "$FULL" = true ]; then
     # Mixed RandRW
     RUNTIME=$LEAN_RUNTIME
     current_test_name="Randrw 4k"
-    do_disk_test "4k" "${BASEDIR}/bm_randrw.txt" "randrw:rwmixread=70" false $CONC_JOBS $CONC_IODEPTH
+    do_disk_test "4k" "${RESULTS_DIR}/bm_randrw.txt" "randrw:rwmixread=70" false $CONC_JOBS $CONC_IODEPTH
 
     # Trim for SSD
     if [ "$SSD" = true ]; then
         current_test_name="Trim 4k"
-        do_disk_test "4k" "${BASEDIR}/bm_trim.txt" "trim" false $CONC_JOBS $CONC_IODEPTH
+        do_disk_test "4k" "${RESULTS_DIR}/bm_trim.txt" "trim" false $CONC_JOBS $CONC_IODEPTH
     fi
 
     # Full mode: additional 512k tests
@@ -544,12 +548,12 @@ else
     # Mixed RandRW
     RUNTIME=$LEAN_RUNTIME
     current_test_name="Randrw 4k"
-    do_disk_test "4k" "${BASEDIR}/bm_randrw.txt" "randrw:rwmixread=70" false $CONC_JOBS $CONC_IODEPTH
+    do_disk_test "4k" "${RESULTS_DIR}/bm_randrw.txt" "randrw:rwmixread=70" false $CONC_JOBS $CONC_IODEPTH
 
     # Trim for SSD
     if [ "$SSD" = true ]; then
         current_test_name="Trim 4k"
-        do_disk_test "4k" "${BASEDIR}/bm_trim.txt" "trim" false $CONC_JOBS $CONC_IODEPTH
+        do_disk_test "4k" "${RESULTS_DIR}/bm_trim.txt" "trim" false $CONC_JOBS $CONC_IODEPTH
     fi
 fi
 
