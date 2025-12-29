@@ -14,24 +14,25 @@ The script now includes additional lean tests for more comprehensive disk perfor
 - **Direct I/O**: All tests bypass the OS cache for raw disk performance.
 - **Latency Tracking**: Added to 4k random read and 1M sequential read tests to measure response times.
 - **Mixed Random Read/Write**: A new test with 70% read / 30% write at 4k block size, run for 60 seconds.
-- **Trim Test**: For SSDs only (enabled with --ssd flag), tests garbage collection at 4k block size.
+- **Trim Test**: For SSDs only (enabled with --ssd flag), tests garbage collection at 4k block size. **Note: TRIM only works on block devices, not regular files.** If run on a regular file (default behavior), the test will be skipped with a warning message.
 - **High Concurrency**: Optional (enabled with --concurrency flag), increases jobs to 4 and I/O depth to 16 on the 64k random read test.
 
 ## Usage
 
 The script supports lean, full, test, and individual test modes:
 
-- **Lean Mode (Default)**: Runs the original tests with enhancements (direct I/O, latency, mixed RandRW, optional trim/concurrency). Lean tests use shorter runtimes (60s) for efficiency. Total runtime ~1-1.25 hours.
+- **Lean Mode (Default)**: Runs original tests with enhancements (direct I/O, latency, mixed RandRW, optional trim/concurrency). Lean tests use shorter runtimes (60s) for efficiency. Total runtime ~1-1.25 hours.
 - **Full Mode**: Adds comprehensive tests with full runtimes (300s for lean additions) and extra block sizes (512k). Total runtime ~2-3 hours.
 - **Test Mode**: Runs partial core tests (4k randread, 64k randwrite, 1M read) with 15s runtime for quick validation. Total runtime ~1 minute.
 - **Individual Test Mode**: Run specific test types on selected block sizes. Useful for targeted performance analysis.
 
-Run the script with optional flags:
+Run script with optional flags:
 
 **Preset modes:**
 - `bash fio_benchmark.sh`: Lean mode (HDD, no concurrency).
 - `bash fio_benchmark.sh --full`: Full mode with additional tests.
 - `bash fio_benchmark.sh --test`: Test mode (15s runtime, partial core tests for quick validation).
+- `bash fio_benchmark.sh --quick`: Quick mode (1G file size, 15s runtime per test). Useful for fast testing.
 
 **Test type modifiers:**
 - `bash fio_benchmark.sh --ssd`: Enable SSD-specific tests (e.g., trim).
@@ -70,13 +71,25 @@ bash fio_benchmark.sh --trim --4k --ssd
 
 # Run multiple test types with concurrency
 bash fio_benchmark.sh --randread --randwrite --4k --64k --concurrency
+
+# Quick test mode (small file size, short runtime)
+bash fio_benchmark.sh --quick --randread --4k
+
+# Custom file size (500M instead of default 10G)
+bash fio_benchmark.sh --filesize 500M --randread --4k
+
+# Quick test with custom file size
+bash fio_benchmark.sh --quick --filesize 500M --randread --4k
 ```
 
 **Notes:**
 - Individual test flags must be combined with at least one block size flag
 - Trim tests only support 4k block size
+- **TRIM requires block device, not regular files.** When run on a regular file (default), the test will be skipped with a warning in the Status column
 - Individual tests create separate output files: `bm_<type>_<size>_individual.txt`
 - Progress bar is disabled in individual test mode; elapsed and estimated remaining time are shown
+- Use `--quick` flag for fast testing (1G file, 15s runtime)
+- Use `--filesize <size>` to specify custom file size (e.g., `--filesize 500M` for faster tests)
 
 **Note**: On macOS, ensure `fio` is installed (e.g., via Homebrew). Summary parsing is optimized for macOS fio output; use `--test` for quick checks.
 

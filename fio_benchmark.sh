@@ -11,6 +11,9 @@ FILESIZE=10G
 
 # RUNTIME=15    # For testing only
 RUNTIME=300
+
+# Default file size for calculations (in MB)
+FILESIZE_MB=10240
 TMPFILE=tmp_test
 TESTNAME=disk_test
 
@@ -35,6 +38,7 @@ HDD=false
 CONCURRENCY=false
 FULL=false
 TEST=false
+QUICK=false
 
 # Individual test type flags
 RANDREAD=false
@@ -57,6 +61,7 @@ while [[ $# -gt 0 ]]; do
         -c|--concurrency) CONCURRENCY=true ;;
         -f|--full) FULL=true ;;
         -t|--test) TEST=true ;;
+        --quick) QUICK=true ;;
         --randread) RANDREAD=true ;;
         --randwrite) RANDWRITE=true ;;
         --read) READ=true ;;
@@ -67,12 +72,37 @@ while [[ $# -gt 0 ]]; do
         --64k) BS_64K=true ;;
         --1M) BS_1M=true ;;
         --512k) BS_512K=true ;;
+        --filesize) FILESIZE="$2"; shift ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
     esac
     shift
 done
 
 # Validate flags
+# Calculate file size in MB for runtime estimation
+calculate_filesize_mb() {
+    local size=$1
+    local value=$(echo "$size" | sed 's/[A-Za-z]*$//')
+    local unit=$(echo "$size" | sed 's/[0-9.]*//')
+
+    case $unit in
+        G|g) FILESIZE_MB=$((value * 1024)) ;;
+        M|m) FILESIZE_MB=$value ;;
+        K|k) FILESIZE_MB=$((value / 1024)) ;;
+        *) FILESIZE_MB=$((value * 1024)) ;;  # Default to GB
+    esac
+}
+
+calculate_filesize_mb "$FILESIZE"
+
+# Quick mode: small file size and shorter runtime for testing
+if [ "$QUICK" = true ]; then
+    FILESIZE="1G"
+    FILESIZE_MB=1024
+    RUNTIME=15
+    echo "Quick mode: Using 1G file size, 15s runtime per test" >&2
+fi
+
 validate_flags() {
     local individual_tests=false
     local block_sizes=false
@@ -193,6 +223,34 @@ do_disk_test () {
 		extra=""
 	fi
 
+	# Check if TRIM test and file is not a block device
+	if [ "$rw_part" = "trim" ]; then
+		if [ ! -b "$TMPFILE" ]; then
+			# TRIM requires block device, regular file will fail
+			echo "" >&2
+			echo "WARNING: TRIM test requires a block device, not a regular file." >&2
+			echo "Skipping TRIM test on $TMPFILE" >&2
+			echo "" >&2
+
+			# Create output file indicating skipped test
+			if [ "$APPEND" = "true" ]; then
+				echo "==========================================================" >> "${OFNAME}"
+			else
+				echo "==========================================================" > "${OFNAME}"
+			fi
+			echo ""  >> "${OFNAME}"
+			if [ "$APPEND" = "false" ]; then
+				echo "Testing directory: ${BASEDIR}" >> "${OFNAME}"
+			fi
+			echo "This is ${rw_part}, block size = ${BLOCKSIZE}" >> "${OFNAME}"
+			echo "" >> "${OFNAME}"
+			echo "SKIPPED: TRIM requires block device, not regular file ($TMPFILE)" >> "${OFNAME}"
+			echo "ERROR: Invalid argument (TRIM not supported on regular files)" >> "${OFNAME}"
+
+			return 1
+		fi
+	fi
+
 	if [ "$APPEND" = "true" ]; then
 		echo "==========================================================" >> "${OFNAME}"
 	else
@@ -219,9 +277,9 @@ do_disk_test () {
 	    if [ "$INDIVIDUAL_TESTS" = false ]; then
 	        progress=$((current_test * 20 / total_tests))
 	        bar=$(printf '%*s' "$progress" '' | tr ' ' '#'; printf '%*s' "$((20 - progress))" '' | tr ' ' ' ')
- 	    msg="Progress: [$bar] $((current_test * 100 / total_tests))% | Running: $current_test_name | Elapsed: $(format_time $elapsed) | Remaining: ~$(format_time $remaining) (approximate)"
- 	    else
- 	        msg="Running: $current_test_name | Elapsed: $(format_time $elapsed) | Remaining: ~$(format_time $remaining) (approximate)"
+  	    msg="Progress: [$bar] $((current_test * 100 / total_tests))% | Running: $current_test_name | Elapsed: $(format_time $elapsed) | Remaining: ~$(format_time $remaining) (approximate)"
+  	    else
+  	        msg="Running: $current_test_name | Elapsed: $(format_time $elapsed) | Remaining: ~$(format_time $remaining) (approximate)"
 	    fi
 	    printf "%s\r" "$msg" >&2
 	    sleep 10
@@ -236,13 +294,13 @@ do_disk_test () {
 summarize_results() {
     local summary_file="${RESULTS_DIR}/summary.txt"
     echo "Generating summary..." >&2
- 
+
     local data=()
-    data+=("Test|IOPS Read|IOPS Write|BW Read|BW Write|Lat Avg Read (us)|Lat Avg Write (us)|CPU|Runtime")
-    
+    data+=("Test|IOPS Read|IOPS Write|BW Read|BW Write|Lat Avg Read (us)|Lat Avg Write (us)|CPU|Runtime|Status")
+
     # Get all benchmark files once to avoid duplicate processing
     local files=($(find "${RESULTS_DIR}" -maxdepth 1 -type f \( -name "bm_*.txt" -o -name "bm_*_individual.txt" \)))
-    
+
     for file in "${files[@]}"; do
         [ -f "$file" ] || continue
 
@@ -280,6 +338,22 @@ summarize_results() {
             local write_lat="N/A"
             local cpu="N/A"
             local runtime="N/A"
+            local status="OK"
+
+            # Check if test was skipped (TRIM on regular file)
+            if grep -q "SKIPPED:" "$file"; then
+                status="SKIPPED"
+                local skip_reason=$(grep "SKIPPED:" "$file" | sed 's/SKIPPED: //' | head -1)
+                # For skipped tests, show reason in status column
+                status="$skip_reason"
+                runtime="N/A"
+                cpu="N/A"
+            # Check if test failed (FIO error)
+            elif grep -q "err=[0-9]" "$file" && ! grep -q "err= 0:" "$file"; then
+                status="FAILED"
+                local error_msg=$(grep "fio:.*err=" "$file" | sed 's/.*error=\(.*\)/\1/' | head -1)
+                status="FAILED: $error_msg"
+            fi
 
             if [ "$test_type" != "trim" ]; then
                 # Extract runtime (format: run=300098-300098msec)
@@ -330,6 +404,22 @@ summarize_results() {
 
                 # Extract CPU
                 cpu=$(grep -A 50 "This is $test_type" "$file" | grep "cpu" -A 1 | grep "usr=" | head -1 | sed 's/.*usr=\([0-9.]*%\), sys=\([0-9.]*%\).*/usr=\1 sys=\2/')
+            elif [ "$status" = "OK" ]; then
+                # TRIM test completed successfully - extract CPU and runtime
+                local test_runtime_ms=$(grep -A 50 "This is $test_type" "$file" | grep "run=" | head -1 | sed 's/.*run=\([0-9]*\)-[0-9]*msec.*/\1/')
+                if [ -n "$test_runtime_ms" ]; then
+                    local runtime_sec=$((test_runtime_ms / 1000))
+                    local hours=$((runtime_sec / 3600))
+                    local minutes=$(((runtime_sec % 3600) / 60))
+                    local seconds=$((runtime_sec % 60))
+                    if [ $hours -gt 0 ]; then
+                        runtime=$(printf "%02d:%02d:%02d" $hours $minutes $seconds)
+                    else
+                        runtime=$(printf "%02d:%02d" $minutes $seconds)
+                    fi
+                fi
+                # Extract CPU for TRIM
+                cpu=$(grep -A 50 "This is $test_type" "$file" | grep "cpu" -A 1 | grep "usr=" | head -1 | sed 's/.*usr=\([0-9.]*%\), sys=\([0-9.]*%\).*/usr=\1 sys=\2/')
             fi
 
             [ -z "$read_iops" ] && read_iops="N/A"
@@ -340,8 +430,9 @@ summarize_results() {
             [ -z "$write_lat" ] && write_lat="N/A"
             [ -z "$cpu" ] && cpu="N/A"
             [ -z "$runtime" ] && runtime="N/A"
+            [ -z "$status" ] && status="N/A"
 
-            data+=("$test|$read_iops|$write_iops|$read_bw|$write_bw|$read_lat|$write_lat|$cpu|$runtime")
+            data+=("$test|$read_iops|$write_iops|$read_bw|$write_bw|$read_lat|$write_lat|$cpu|$runtime|$status")
         done
     done
 
