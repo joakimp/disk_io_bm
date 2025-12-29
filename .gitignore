@@ -2,3 +2,4 @@ bm_*
 tmp_*
 summary.txt
 *.bak
+bm_*_individual.txt

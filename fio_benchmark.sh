@@ -40,6 +40,21 @@ HDD=false
 CONCURRENCY=false
 FULL=false
 TEST=false
+
+# Individual test type flags
+RANDREAD=false
+RANDWRITE=false
+READ=false
+WRITE=false
+MIXED=false
+TRIM=false
+
+# Block size flags
+BS_4K=false
+BS_64K=false
+BS_1M=false
+BS_512K=false
+
 while [[ $# -gt 0 ]]; do
     case $1 in
         -s|--ssd) SSD=true ;;
@@ -47,10 +62,66 @@ while [[ $# -gt 0 ]]; do
         -c|--concurrency) CONCURRENCY=true ;;
         -f|--full) FULL=true ;;
         -t|--test) TEST=true ;;
+        --randread) RANDREAD=true ;;
+        --randwrite) RANDWRITE=true ;;
+        --read) READ=true ;;
+        --write) WRITE=true ;;
+        --mixed) MIXED=true ;;
+        --trim) TRIM=true ;;
+        --4k) BS_4K=true ;;
+        --64k) BS_64K=true ;;
+        --1M) BS_1M=true ;;
+        --512k) BS_512K=true ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
     esac
     shift
 done
+
+# Validate flags
+validate_flags() {
+    local individual_tests=false
+    local block_sizes=false
+
+    # Check if any individual test flags are set
+    if [ "$RANDREAD" = true ] || [ "$RANDWRITE" = true ] || [ "$READ" = true ] || \
+       [ "$WRITE" = true ] || [ "$MIXED" = true ] || [ "$TRIM" = true ]; then
+        individual_tests=true
+    fi
+
+    # Check if any block size flags are set
+    if [ "$BS_4K" = true ] || [ "$BS_64K" = true ] || [ "$BS_1M" = true ] || [ "$BS_512K" = true ]; then
+        block_sizes=true
+    fi
+
+    # Check for mode conflicts
+    if [ "$individual_tests" = true ]; then
+        if [ "$TEST" = true ] || [ "$FULL" = true ]; then
+            echo "Error: Individual test flags cannot be combined with --test or --full" >&2
+            echo "Please use either --test/--full OR individual test flags, not both." >&2
+            exit 1
+        fi
+
+        if [ "$block_sizes" = false ]; then
+            echo "Error: Individual test flags require at least one block size (--4k, --64k, --1M, --512k)" >&2
+            exit 1
+        fi
+    fi
+
+    # Validate trim requires SSD
+    if [ "$TRIM" = true ] && [ "$SSD" = false ]; then
+        echo "Error: --trim flag requires --ssd flag" >&2
+        exit 1
+    fi
+}
+
+validate_flags
+
+# Determine mode
+INDIVIDUAL_TESTS=false
+if [ "$RANDREAD" = true ] || [ "$RANDWRITE" = true ] || [ "$READ" = true ] || \
+   [ "$WRITE" = true ] || [ "$MIXED" = true ] || [ "$TRIM" = true ]; then
+    INDIVIDUAL_TESTS=true
+fi
 
 # Test mode settings
 if [ "$TEST" = true ]; then
@@ -61,12 +132,31 @@ fi
 # Progress tracking
 start_time=$(date +%s)
 current_test=0
+
 if [ "$TEST" = true ]; then
     total_tests=3
     total_runtime=45
 elif [ "$FULL" = true ]; then
     total_tests=18
     total_runtime=7200
+ elif [ "$INDIVIDUAL_TESTS" = true ]; then
+    # Calculate total tests based on selected types and block sizes
+    test_types=0
+    [ "$RANDREAD" = true ] && test_types=$((test_types + 1))
+    [ "$RANDWRITE" = true ] && test_types=$((test_types + 1))
+    [ "$READ" = true ] && test_types=$((test_types + 1))
+    [ "$WRITE" = true ] && test_types=$((test_types + 1))
+    [ "$MIXED" = true ] && test_types=$((test_types + 1))
+    [ "$TRIM" = true ] && test_types=$((test_types + 1))
+
+    block_count=0
+    [ "$BS_4K" = true ] && block_count=$((block_count + 1))
+    [ "$BS_64K" = true ] && block_count=$((block_count + 1))
+    [ "$BS_1M" = true ] && block_count=$((block_count + 1))
+    [ "$BS_512K" = true ] && block_count=$((block_count + 1))
+
+    total_tests=$((test_types * block_count))
+    total_runtime=$((total_tests * RUNTIME))
 else
     total_tests=14
     total_runtime=4200
@@ -131,9 +221,13 @@ do_disk_test () {
 	    elapsed=$(($(date +%s) - start_time))
 	    remaining=$((total_runtime - elapsed))
 	    if [ "$remaining" -lt 0 ]; then remaining=0; fi
-	    progress=$((current_test * 20 / total_tests))
-	    bar=$(printf '%*s' "$progress" '' | tr ' ' '#'; printf '%*s' "$((20 - progress))" '' | tr ' ' ' ')
-	    msg="Progress: [$bar] $((current_test * 100 / total_tests))% | Running: $current_test_name | Elapsed: $(format_time $elapsed) | Remaining: ~$(format_time $remaining)"
+	    if [ "$INDIVIDUAL_TESTS" = false ]; then
+	        progress=$((current_test * 20 / total_tests))
+	        bar=$(printf '%*s' "$progress" '' | tr ' ' '#'; printf '%*s' "$((20 - progress))" '' | tr ' ' ' ')
+	        msg="Progress: [$bar] $((current_test * 100 / total_tests))% | Running: $current_test_name | Elapsed: $(format_time $elapsed) | Remaining: ~$(format_time $remaining)"
+	    else
+	        msg="Running: $current_test_name | Elapsed: $(format_time $elapsed) | Remaining: ~$(format_time $remaining)"
+	    fi
 	    printf "%s\r" "$msg" >&2
 	    sleep 10
 	done
@@ -237,8 +331,66 @@ summarize_results() {
     echo "Summary saved to $summary_file" >&2
 }
 
+run_individual_tests() {
+    local test_types=("randread" "randwrite" "read" "write" "randrw" "trim")
+    local block_sizes=("4k" "64k" "1M" "512k")
+    local type_vars=("RANDREAD" "RANDWRITE" "READ" "WRITE" "MIXED" "TRIM")
+    local size_vars=("BS_4K" "BS_64K" "BS_1M" "BS_512K")
+
+    local i j
+    for ((i=0; i<${#test_types[@]}; i++)); do
+        local test_type="${test_types[$i]}"
+        local type_var="${type_vars[$i]}"
+
+        if [ "${!type_var}" = true ]; then
+            for ((j=0; j<${#block_sizes[@]}; j++)); do
+                local block_size="${block_sizes[$j]}"
+                local size_var="${size_vars[$j]}"
+
+                if [ "${!size_var}" = true ]; then
+                    # Skip invalid combinations (trim only supports 4k)
+                    if [ "$test_type" = "trim" ] && [ "$block_size" != "4k" ]; then
+                        continue
+                    fi
+
+                    # Generate unique output filename
+                    local output_file="${BASEDIR}/bm_${test_type}_${block_size}_individual.txt"
+
+                    # Set test name and description
+                    if [ "$test_type" = "randrw" ]; then
+                        current_test_name="Mixed Random Read/Write ${block_size}"
+                    elif [ "$test_type" = "randread" ]; then
+                        current_test_name="Randread ${block_size}"
+                    elif [ "$test_type" = "randwrite" ]; then
+                        current_test_name="Randwrite ${block_size}"
+                    elif [ "$test_type" = "read" ]; then
+                        current_test_name="Read ${block_size}"
+                    elif [ "$test_type" = "write" ]; then
+                        current_test_name="Write ${block_size}"
+                    elif [ "$test_type" = "trim" ]; then
+                        current_test_name="Trim ${block_size}"
+                    fi
+
+                    # Determine testtype parameter
+                    local testtype_param
+                    if [ "$test_type" = "randrw" ]; then
+                        testtype_param="randrw:rwmixread=70"
+                    else
+                        testtype_param="$test_type"
+                    fi
+
+                    # Run test
+                    do_disk_test "$block_size" "$output_file" "$testtype_param" false $CONC_JOBS $CONC_IODEPTH
+                fi
+            done
+        fi
+    done
+}
+
 # Main test execution
-if [ "$TEST" = true ]; then
+if [ "$INDIVIDUAL_TESTS" = true ]; then
+    run_individual_tests
+elif [ "$TEST" = true ]; then
     # Test mode: partial tests for quick validation
     current_test_name="Random Read 4k"
     do_disk_test "4k" "${OFNAME1}" "randread" false $CONC_JOBS $CONC_IODEPTH

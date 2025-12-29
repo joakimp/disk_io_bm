@@ -19,20 +19,64 @@ The script now includes additional lean tests for more comprehensive disk perfor
 
 ## Usage
 
-The script supports lean, full, and test modes:
+The script supports lean, full, test, and individual test modes:
 
 - **Lean Mode (Default)**: Runs the original tests with enhancements (direct I/O, latency, mixed RandRW, optional trim/concurrency). Lean tests use shorter runtimes (60s) for efficiency. Total runtime ~1-1.25 hours.
 - **Full Mode**: Adds comprehensive tests with full runtimes (300s for lean additions) and extra block sizes (512k). Total runtime ~2-3 hours.
 - **Test Mode**: Runs partial core tests (4k randread, 64k randwrite, 1M read) with 15s runtime for quick validation. Total runtime ~1 minute.
+- **Individual Test Mode**: Run specific test types on selected block sizes. Useful for targeted performance analysis.
 
 Run the script with optional flags:
 
+**Preset modes:**
 - `bash fio_benchmark.sh`: Lean mode (HDD, no concurrency).
 - `bash fio_benchmark.sh --full`: Full mode with additional tests.
 - `bash fio_benchmark.sh --test`: Test mode (15s runtime, partial core tests for quick validation).
+
+**Test type modifiers:**
 - `bash fio_benchmark.sh --ssd`: Enable SSD-specific tests (e.g., trim).
 - `bash fio_benchmark.sh --concurrency`: Enable high concurrency on select tests.
 - `bash fio_benchmark.sh --full --ssd --concurrency`: Combine for comprehensive SSD testing.
+
+**Individual test flags (mutually exclusive with --test and --full):**
+
+Test types:
+- `--randread`: Random read tests
+- `--randwrite`: Random write tests
+- `--read`: Sequential read tests
+- `--write`: Sequential write tests
+- `--mixed`: Mixed random read/write (70/30 split) tests
+- `--trim`: Trim tests (requires --ssd)
+
+Block sizes:
+- `--4k`: Run tests with 4k block size
+- `--64k`: Run tests with 64k block size
+- `--1M`: Run tests with 1M block size
+- `--512k`: Run tests with 512k block size
+
+**Individual test examples:**
+```bash
+# Run random read on 4k and 64k
+bash fio_benchmark.sh --randread --4k --64k
+
+# Run sequential read and write on 1M
+bash fio_benchmark.sh --read --write --1M
+
+# Run mixed tests on all block sizes
+bash fio_benchmark.sh --mixed --4k --64k --1M --512k
+
+# Run trim test with SSD flag
+bash fio_benchmark.sh --trim --4k --ssd
+
+# Run multiple test types with concurrency
+bash fio_benchmark.sh --randread --randwrite --4k --64k --concurrency
+```
+
+**Notes:**
+- Individual test flags must be combined with at least one block size flag
+- Trim tests only support 4k block size
+- Individual tests create separate output files: `bm_<type>_<size>_individual.txt`
+- Progress bar is disabled in individual test mode; elapsed and estimated remaining time are shown
 
 **Note**: On macOS, ensure `fio` is installed (e.g., via Homebrew). Summary parsing is optimized for macOS fio output; use `--test` for quick checks.
 
