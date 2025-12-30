@@ -19,7 +19,9 @@ class BenchmarkExecutor:
     def __init__(self, config: BenchmarkConfig, console: Optional[Console] = None):
         self.config = config
         self.console = console or Console()
-        self.temp_dir = Path(tempfile.mkdtemp(prefix="disk_benchmark_"))
+        from pathlib import Path
+
+        self.temp_dir = Path.cwd()
         self.is_macos = platform.system() == "Darwin"
 
     def run_all_tests(self) -> List[dict]:
@@ -195,7 +197,6 @@ class BenchmarkExecutor:
                     "--ioengine=psync",
                     "--iodepth=1",
                     "--numjobs=1",
-                    "--disable-shared=1",
                 ]
             )
         else:
