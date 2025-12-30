@@ -124,25 +124,41 @@ class BenchmarkExecutor:
             )
 
             if result.returncode == 0:
-                parsed = self._parse_fio_json_output(result.stdout, test_config)
+                parsed = self._parse_fio_json_output(result.stdout, test_config, allow_empty=True)
                 parsed["status"] = "OK"
                 parsed["output_file"] = str(test_file)
                 return parsed
             else:
-                self.console.print(f"[red]FIO test failed: {result.stderr}[/red]")
-                return {
-                    "test_type": test_config["test_type"],
-                    "block_size": test_config["block_size"],
-                    "status": f"FAILED: {result.stderr.strip()}",
-                    "read_iops": 0,
-                    "write_iops": 0,
-                    "read_bw": 0,
-                    "write_bw": 0,
-                    "read_latency_us": 0,
-                    "write_latency_us": 0,
-                    "cpu": "N/A",
-                    "runtime_sec": 0,
-                }
+                json_data = self._parse_fio_json_output(
+                    result.stdout, test_config, allow_empty=True
+                )
+                is_valid_benchmark = (
+                    json_data.get("read_iops", 0) > 0
+                    or json_data.get("write_iops", 0) > 0
+                    or json_data.get("read_bw", 0) > 0
+                    or json_data.get("write_bw", 0) > 0
+                    or json_data.get("runtime_sec", 0) > 0
+                )
+
+                if is_valid_benchmark:
+                    json_data["status"] = "OK"
+                    return json_data
+                else:
+                    stderr_msg = result.stderr.strip() if result.stderr else "unknown error"
+                    self.console.print(f"[red]FIO test failed: {stderr_msg}[/red]")
+                    return {
+                        "test_type": test_config["test_type"],
+                        "block_size": test_config["block_size"],
+                        "status": f"FAILED: {stderr_msg}",
+                        "read_iops": 0,
+                        "write_iops": 0,
+                        "read_bw": 0,
+                        "write_bw": 0,
+                        "read_latency_us": 0,
+                        "write_latency_us": 0,
+                        "cpu": "N/A",
+                        "runtime_sec": 0,
+                    }
 
         except subprocess.TimeoutExpired:
             self.console.print(f"[red]Test timed out: {test_config['test_type']}[/red]")
@@ -238,7 +254,9 @@ class BenchmarkExecutor:
 
         return cmd
 
-    def _parse_fio_json_output(self, output: str, test_config: dict) -> dict:
+    def _parse_fio_json_output(
+        self, output: str, test_config: dict, allow_empty: bool = False
+    ) -> dict:
         """Parse FIO JSON output"""
         try:
             data = json.loads(output)
@@ -286,7 +304,9 @@ class BenchmarkExecutor:
         sys_val = cpu.get("system", 0)
         return f"usr={usr:.1f}%, sys={sys_val:.1f}%"
 
-    def _empty_result(self, test_config: dict, reason: str = "Empty result") -> dict:
+    def _empty_result(
+        self, test_config: dict, reason: str = "Empty result", allow_empty: bool = False
+    ) -> dict:
         """Return empty result placeholder"""
         return {
             "test_type": test_config["test_type"],
