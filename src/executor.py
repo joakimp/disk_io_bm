@@ -351,7 +351,7 @@ class BenchmarkExecutor:
                 "write_latency_us": self._convert_latency(
                     write.get("lat_ns", {}).get("mean", 0) if write else 0
                 ),
-                "cpu": self._extract_cpu(job.get("job_options", {})),
+                "cpu": self._extract_cpu(job),
                 "io_time_sec": job.get("job_runtime", 0) / 1000,
             }
         except json.JSONDecodeError as e:
@@ -364,12 +364,15 @@ class BenchmarkExecutor:
         """Convert latency from nanoseconds to microseconds"""
         return round(latency_ns / 1000, 2) if latency_ns else 0
 
-    def _extract_cpu(self, job_options: dict) -> str:
-        """Extract CPU usage from job options"""
-        cpu = job_options.get("cpu", {})
-        usr = cpu.get("user", 0)
-        sys_val = cpu.get("system", 0)
-        return f"usr={usr:.1f}%, sys={sys_val:.1f}%"
+    def _extract_cpu(self, job: dict) -> str:
+        """Extract CPU usage from job data
+
+        FIO stores CPU usage directly on the job object as usr_cpu and sys_cpu
+        (percentage values).
+        """
+        usr = job.get("usr_cpu", 0) or 0
+        sys_val = job.get("sys_cpu", 0) or 0
+        return f"usr={usr:.2f}%, sys={sys_val:.2f}%"
 
     def _empty_result(
         self, test_config: dict, reason: str = "Empty result", allow_empty: bool = False

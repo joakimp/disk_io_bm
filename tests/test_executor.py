@@ -8,7 +8,11 @@ from src.executor import BenchmarkExecutor
 
 @pytest.fixture
 def mock_fio_json_output():
-    """Mock FIO JSON output for testing"""
+    """Mock FIO JSON output for testing
+
+    FIO stores CPU usage directly on the job object as usr_cpu and sys_cpu,
+    not nested under job_options.
+    """
     return json.dumps(
         {
             "jobs": [
@@ -19,12 +23,9 @@ def mock_fio_json_output():
                         "lat_ns": {"mean": 50000.0},
                     },
                     "write": {},
-                    "job_options": {
-                        "cpu": {
-                            "user": 5.5,
-                            "system": 2.3,
-                        },
-                    },
+                    "job_options": {},
+                    "usr_cpu": 5.5,
+                    "sys_cpu": 2.3,
                     "job_runtime": 15023,  # FIO reports job runtime in milliseconds
                 }
             ]
@@ -111,7 +112,8 @@ def test_parse_fio_json_output(mock_fio_json_output):
     assert result["write_bw"] == 0
     assert abs(result["read_latency_us"] - 50.0) < 1
     assert result["write_latency_us"] == 0
-    assert "usr=5.5%" in result["cpu"]
+    assert "usr=5.50%" in result["cpu"]
+    assert "sys=2.30%" in result["cpu"]
     assert result["io_time_sec"] == 15.023
 
 
