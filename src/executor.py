@@ -273,7 +273,18 @@ class BenchmarkExecutor:
     ) -> dict:
         """Parse FIO JSON output"""
         try:
-            data = json.loads(output)
+            # FIO may output non-JSON content (progress, warnings) before/after JSON
+            # Extract just the JSON portion
+            json_start = output.find("{")
+            json_end = output.rfind("}") + 1
+            if json_start == -1 or json_end == 0:
+                self.console.print("[red]No JSON found in FIO output[/red]")
+                if output.strip():
+                    self.console.print(f"[dim]Raw output: {output[:500]}[/dim]")
+                return self._empty_result(test_config, "No JSON in output")
+
+            json_str = output[json_start:json_end]
+            data = json.loads(json_str)
             jobs = data.get("jobs", [])
 
             if not jobs:
@@ -303,8 +314,10 @@ class BenchmarkExecutor:
                 "cpu": self._extract_cpu(job.get("job_options", {})),
                 "io_time_sec": job.get("job_runtime", 0) / 1000,
             }
-        except json.JSONDecodeError:
-            self.console.print("[red]Failed to parse FIO JSON output[/red]")
+        except json.JSONDecodeError as e:
+            self.console.print(f"[red]Failed to parse FIO JSON output: {e}[/red]")
+            if output.strip():
+                self.console.print(f"[dim]Raw output (first 500 chars): {output[:500]}[/dim]")
             return self._empty_result(test_config, "JSON parse error")
 
     def _convert_latency(self, latency_ns: float) -> float:
