@@ -20,6 +20,45 @@ from rich.progress import (
 from src.config import BenchmarkConfig, Mode
 
 
+def _parse_filesize_to_bytes(filesize: str) -> int:
+    """Parse filesize string (e.g., '10G', '1M', '512k') to bytes"""
+    filesize = filesize.strip().upper()
+    multipliers = {
+        "K": 1024,
+        "M": 1024**2,
+        "G": 1024**3,
+        "T": 1024**4,
+    }
+    if filesize[-1] in multipliers:
+        return int(float(filesize[:-1]) * multipliers[filesize[-1]])
+    return int(filesize)
+
+
+def _calculate_timeout(config: BenchmarkConfig) -> int:
+    """Calculate appropriate timeout based on filesize and runtime.
+
+    For read tests, fio must first create the test file before reading.
+    On slow disks, this can take significant time. We estimate based on
+    a conservative 10 MB/s write speed for file creation.
+    """
+    if config.timeout > 0:
+        return config.timeout
+
+    # Parse filesize to bytes
+    filesize_bytes = _parse_filesize_to_bytes(config.filesize)
+    filesize_gb = filesize_bytes / (1024**3)
+
+    # Estimate file creation time assuming worst-case 10 MB/s write speed
+    # This is conservative to handle very slow disks
+    file_creation_time = int(filesize_bytes / (10 * 1024 * 1024))
+
+    # Timeout = runtime + file creation time + 60s buffer
+    # Minimum 120 seconds to handle edge cases
+    timeout = max(120, config.runtime + file_creation_time + 60)
+
+    return timeout
+
+
 def _format_time_hhmmss(seconds: float) -> str:
     """Format seconds as HH:MM:SS or MM:SS if under an hour"""
     total_secs = int(seconds)
@@ -143,6 +182,10 @@ class BenchmarkExecutor:
         wall_start = time.time()
         stop_progress = threading.Event()
 
+        # Check if this is a read-only test that needs file pre-creation
+        test_type = test_config["test_type"]
+        is_read_test = test_type in ("read", "randread")
+
         def update_progress():
             """Background thread to update progress bar"""
             while not stop_progress.is_set():
@@ -167,7 +210,33 @@ class BenchmarkExecutor:
         progress_thread = threading.Thread(target=update_progress, daemon=True)
         progress_thread.start()
 
+        # Calculate timeout based on filesize and runtime
+        timeout = _calculate_timeout(self.config)
+
         try:
+            # Pre-create test file for read tests to avoid timeout during file creation
+            if is_read_test and not test_file.exists():
+                self.console.print(
+                    f"[dim]Pre-creating test file ({self.config.filesize}) for read test...[/dim]"
+                )
+                precreate_result = self._precreate_test_file(test_file, timeout)
+                if not precreate_result:
+                    wall_time_sec = round(time.time() - wall_start, 2)
+                    return {
+                        "test_type": test_config["test_type"],
+                        "block_size": test_config["block_size"],
+                        "status": "FAILED: Could not create test file",
+                        "read_iops": 0,
+                        "write_iops": 0,
+                        "read_bw": 0,
+                        "write_bw": 0,
+                        "read_latency_us": 0,
+                        "write_latency_us": 0,
+                        "cpu": "N/A",
+                        "io_time_sec": 0,
+                        "wall_time_sec": wall_time_sec,
+                    }, wall_time_sec
+
             cmd = self._build_fio_command(test_config, test_file)
             self.console.print(f"[dim]Running: {' '.join(cmd)}[/dim]")
 
@@ -175,7 +244,7 @@ class BenchmarkExecutor:
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=self.config.runtime + 60,
+                timeout=timeout,
             )
 
             wall_time_sec = round(time.time() - wall_start, 2)
@@ -261,6 +330,53 @@ class BenchmarkExecutor:
 
             if test_file.exists():
                 test_file.unlink()
+
+    def _precreate_test_file(self, test_file: Path, timeout: int) -> bool:
+        """Pre-create a test file for read tests using fio.
+
+        This ensures the file exists before running read benchmarks,
+        preventing timeouts on slow disks where file creation takes
+        significant time.
+
+        Returns:
+            True if file was created successfully, False otherwise
+        """
+        try:
+            # Use fio to create the file with a quick write pass
+            cmd = [
+                "fio",
+                "--name=precreate",
+                f"--filename={test_file}",
+                f"--size={self.config.filesize}",
+                "--rw=write",
+                "--bs=1M",  # Large block size for faster creation
+                "--output-format=json",
+                "--iodepth=1",
+                "--numjobs=1",
+            ]
+
+            if not self.is_macos:
+                cmd.append("--direct=1")
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+
+            if result.returncode == 0 or test_file.exists():
+                return True
+            else:
+                self.console.print(f"[red]Failed to pre-create test file: {result.stderr}[/red]")
+                return False
+
+        except subprocess.TimeoutExpired:
+            self.console.print(f"[red]Timeout while pre-creating test file[/red]")
+            return False
+        except Exception as e:
+            self.console.print(f"[red]Error pre-creating test file: {e}[/red]")
+            return False
 
     def _get_test_configs(self) -> List[dict]:
         """Get list of test configurations based on mode"""

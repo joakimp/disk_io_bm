@@ -33,6 +33,12 @@ def disk_benchmark():
     help="Block sizes for individual tests",
 )
 @click.option("--runtime", type=int, default=300, help="Test runtime in seconds")
+@click.option(
+    "--timeout",
+    type=int,
+    default=0,
+    help="Timeout per test in seconds (0=auto-calculate based on filesize)",
+)
 @click.option("--filesize", type=str, default="10G", help="File size for fio")
 @click.option("--output-dir", type=click.Path, default="results", help="Output directory")
 @click.option(
@@ -85,6 +91,7 @@ def main(
     test_type,
     block_size,
     runtime,
+    timeout,
     filesize,
     output_dir,
     output_format,
@@ -115,6 +122,7 @@ def main(
         test_types=list(test_type),
         block_sizes=list(block_size),
         runtime=runtime,
+        timeout=timeout,
         filesize=filesize,
         results_dir=output_dir,
         output_format=output_format,

@@ -45,6 +45,12 @@ def main():
     help="Block sizes for individual tests",
 )
 @click.option("--runtime", type=int, default=300, help="Test runtime in seconds")
+@click.option(
+    "--timeout",
+    type=int,
+    default=0,
+    help="Timeout per test in seconds (0=auto-calculate based on filesize)",
+)
 @click.option("--filesize", type=str, default="10G", help="File size for fio")
 @click.option(
     "--output-format",
@@ -98,6 +104,7 @@ def run(**kwargs):
         "test_types": list(kwargs["test_type"]),
         "block_sizes": list(kwargs["block_size"]),
         "runtime": kwargs["runtime"],
+        "timeout": kwargs["timeout"],
         "filesize": kwargs["filesize"],
         "results_dir": "results",
         "output_format": kwargs["output_format"],
@@ -258,6 +265,9 @@ def run(**kwargs):
     help="Block sizes for individual tests",
 )
 @click.option("--runtime", type=int, default=15, help="Test runtime in seconds")
+@click.option(
+    "--timeout", type=int, default=0, help="Timeout per test in seconds (0=auto-calculate)"
+)
 @click.option("--filesize", type=str, default="1G", help="File size for fio")
 def test(**kwargs):
     """Run a quick test benchmark"""
@@ -271,6 +281,7 @@ def test(**kwargs):
         "test_types": list(kwargs["test_type"]),
         "block_sizes": list(kwargs["block_size"]),
         "runtime": kwargs["runtime"],
+        "timeout": kwargs["timeout"],
         "filesize": kwargs["filesize"],
         "results_dir": "results",
         "output_format": "table",

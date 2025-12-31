@@ -30,6 +30,7 @@ class BenchmarkConfig:
     # Disk parameters
     filesize: str = "10G"
     runtime: int = 300
+    timeout: int = 0  # 0 means auto-calculate based on filesize
     block_size: str = "4k"
     io_depth: int = 4
     num_jobs: int = 1
