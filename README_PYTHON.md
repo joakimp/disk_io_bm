@@ -14,9 +14,9 @@ Feature-rich Python disk I/O benchmarking tool using fio. Extensible with multip
 ## Features
 
 - **Test Modes**: test, lean (default), full, individual
-- **Test Types**: randread, randwrite, read, write, randrw, trim
+- **Test Types**: randread, randwrite, read, write, randrw
 - **Block Sizes**: 4k, 64k, 1M, 512k
-- **Flags**: --ssd (TRIM test + queue optimization), --concurrency, --quick, --filesize
+- **Flags**: --ssd (queue optimization), --concurrency, --quick, --filesize
 - **Output Formats**: table (default), json, csv, excel
 - **Storage Backends**: SQLite (default), JSON, CSV, none
 - **Plot Generation**: Interactive Plotly plots (bar, scatter, radar, line)
@@ -111,15 +111,13 @@ uv run disk-benchmark-py run --mode full --ssd --concurrency
 
 **`--ssd` Flag Details:**
 
-The `--ssd` flag enables SSD-specific tests and optimizations:
+The `--ssd` flag enables SSD-specific optimizations:
 
-1. **Adds TRIM test**: In `lean` and `full` modes, adds a `trim` test with 4k block size. TRIM tests the SSD's ability to mark blocks as unused, which is important for maintaining SSD performance over time. Note: TRIM only works on block devices, not regular files.
+**Queue depth optimization** (Linux only): Adds FIO parameters for better SSD queue handling:
+- `--iodepth_batch_submit_max=32`
+- `--iodepth_batch_complete_max=32`
 
-2. **Queue depth optimization** (Linux only): Adds FIO parameters for better SSD queue handling:
-   - `--iodepth_batch_submit_max=32`
-   - `--iodepth_batch_complete_max=32`
-   
-   These parameters optimize I/O submission batching, which can significantly improve performance on SSDs that handle high queue depths well.
+These parameters optimize I/O submission batching, which can significantly improve performance on SSDs that handle high queue depths well.
 
 **Note:** The `--hdd` flag is currently defined but has no effect. It is reserved for future HDD-specific optimizations.
 
@@ -362,21 +360,19 @@ Quick validation tests:
 ### Lean Mode (Default)
 
 Original tests with enhancements:
-- Tests: 14 tests
-  - 4 block sizes (4k, 64k, 1M) × 4 core tests
-  - Plus randrw (4k, 60s)
-  - Optional trim (4k, with --ssd)
-- Runtime: 60s for core tests, 300s for randrw
+- Tests: 13 tests
+  - 3 block sizes (4k, 64k, 1M) × 4 core tests (randread, randwrite, read, write)
+  - Plus randrw (4k)
+- Runtime: 300s per test
 - Duration: ~1-1.25 hours
 - Includes: Direct I/O, latency tracking
 
 ### Full Mode
 
 Comprehensive testing:
-- Tests: 18 tests
+- Tests: 17 tests
   - 4 block sizes (4k, 64k, 1M, 512k) × 4 core tests
-  - Plus randrw (4k, 60s)
-  - Optional trim (4k, with --ssd)
+  - Plus randrw (4k)
 - Runtime: 300s for all tests
 - Duration: ~2-3 hours
 - Comprehensive coverage of all test types and block sizes

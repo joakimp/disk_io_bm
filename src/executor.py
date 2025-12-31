@@ -79,8 +79,6 @@ class BenchmarkExecutor:
                 {"test_type": "write", "block_size": "1M"},
                 {"test_type": "randrw", "block_size": "4k"},
             ]
-            if self.config.ssd:
-                configs.append({"test_type": "trim", "block_size": "4k"})
         elif self.config.mode == Mode.FULL:
             block_sizes = ["4k", "64k", "1M", "512k"]
             for block_size in block_sizes:
@@ -93,8 +91,6 @@ class BenchmarkExecutor:
                     ]
                 )
             configs.append({"test_type": "randrw", "block_size": "4k"})
-            if self.config.ssd:
-                configs.append({"test_type": "trim", "block_size": "4k"})
         elif self.config.mode == Mode.INDIVIDUAL:
             if not self.config.test_types or not self.config.block_sizes:
                 self.console.print(
