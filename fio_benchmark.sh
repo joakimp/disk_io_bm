@@ -46,7 +46,6 @@ RANDWRITE=false
 READ=false
 WRITE=false
 RANDRW=false
-TRIM=false
 
 # Block size flags
 BS_4K=false
@@ -67,7 +66,6 @@ while [[ $# -gt 0 ]]; do
         --read) READ=true ;;
         --write) WRITE=true ;;
         --randrw) RANDRW=true ;;
-        --trim) TRIM=true ;;
         --4k) BS_4K=true ;;
         --64k) BS_64K=true ;;
         --1M) BS_1M=true ;;
@@ -109,7 +107,7 @@ validate_flags() {
 
     # Check if any individual test flags are set
     if [ "$RANDREAD" = true ] || [ "$RANDWRITE" = true ] || [ "$READ" = true ] || \
-       [ "$WRITE" = true ] || [ "$RANDRW" = true ] || [ "$TRIM" = true ]; then
+       [ "$WRITE" = true ] || [ "$RANDRW" = true ]; then
         individual_tests=true
     fi
 
@@ -131,12 +129,6 @@ validate_flags() {
             exit 1
         fi
     fi
-
-    # Validate trim requires SSD
-    if [ "$TRIM" = true ] && [ "$SSD" = false ]; then
-        echo "Error: --trim flag requires --ssd flag" >&2
-        exit 1
-    fi
 }
 
 validate_flags
@@ -144,7 +136,7 @@ validate_flags
 # Determine mode
 INDIVIDUAL_TESTS=false
 if [ "$RANDREAD" = true ] || [ "$RANDWRITE" = true ] || [ "$READ" = true ] || \
-   [ "$WRITE" = true ] || [ "$RANDRW" = true ] || [ "$TRIM" = true ]; then
+   [ "$WRITE" = true ] || [ "$RANDRW" = true ]; then
     INDIVIDUAL_TESTS=true
 fi
 
@@ -172,7 +164,6 @@ elif [ "$FULL" = true ]; then
     [ "$READ" = true ] && test_types=$((test_types + 1))
     [ "$WRITE" = true ] && test_types=$((test_types + 1))
     [ "$RANDRW" = true ] && test_types=$((test_types + 1))
-    [ "$TRIM" = true ] && test_types=$((test_types + 1))
 
     block_count=0
     [ "$BS_4K" = true ] && block_count=$((block_count + 1))
@@ -224,34 +215,6 @@ do_disk_test () {
 	else
 		rw_part="$TESTTYPE"
 		extra=""
-	fi
-
-	# Check if TRIM test and file is not a block device
-	if [ "$rw_part" = "trim" ]; then
-		if [ ! -b "$TMPFILE" ]; then
-			# TRIM requires block device, regular file will fail
-			echo "" >&2
-			echo "WARNING: TRIM test requires a block device, not a regular file." >&2
-			echo "Skipping TRIM test on $TMPFILE" >&2
-			echo "" >&2
-
-			# Create output file indicating skipped test
-			if [ "$APPEND" = "true" ]; then
-				echo "==========================================================" >> "${OFNAME}"
-			else
-				echo "==========================================================" > "${OFNAME}"
-			fi
-			echo ""  >> "${OFNAME}"
-			if [ "$APPEND" = "false" ]; then
-				echo "Testing directory: ${BASEDIR}" >> "${OFNAME}"
-			fi
-			echo "This is ${rw_part}, block size = ${BLOCKSIZE}" >> "${OFNAME}"
-			echo "" >> "${OFNAME}"
-			echo "SKIPPED: TRIM requires block device, not regular file ($TMPFILE)" >> "${OFNAME}"
-			echo "ERROR: Invalid argument (TRIM not supported on regular files)" >> "${OFNAME}"
-
-			return 1
-		fi
 	fi
 
 	if [ "$APPEND" = "true" ]; then
@@ -338,7 +301,7 @@ summarize_results() {
             local test_type=${test% *}
             local block=${test#* }
             # Skip invalid test types
-            if [[ "$test_type" != "randread" && "$test_type" != "randwrite" && "$test_type" != "read" && "$test_type" != "write" && "$test_type" != "randrw" && "$test_type" != "trim" ]]; then
+            if [[ "$test_type" != "randread" && "$test_type" != "randwrite" && "$test_type" != "read" && "$test_type" != "write" && "$test_type" != "randrw" ]]; then
                 continue
             fi
 
@@ -353,7 +316,7 @@ summarize_results() {
             local wall_time="N/A"
             local status="OK"
 
-            # Check if test was skipped (TRIM on regular file)
+            # Check if test was skipped
             if grep -q "SKIPPED:" "$file"; then
                 status="SKIPPED"
                 local skip_reason=$(grep "SKIPPED:" "$file" | sed 's/SKIPPED: //' | head -1)
@@ -369,113 +332,74 @@ summarize_results() {
                 status="FAILED: $error_msg"
             fi
 
-            if [ "$test_type" != "trim" ]; then
-                # Extract I/O time (format: run=300098-300098msec)
-                local test_io_time_ms=$(grep -A 50 "This is $test_type" "$file" | grep "run=" | head -1 | sed 's/.*run=\([0-9]*\)-[0-9]*msec.*/\1/')
-                if [ -n "$test_io_time_ms" ] && [ "$test_io_time_ms" -gt 0 ]; then
-                    if [ "$test_io_time_ms" -lt 1000 ]; then
-                        # Sub-second I/O time, display in milliseconds
-                        io_time="${test_io_time_ms}ms"
-                    else
-                        local io_time_sec=$((test_io_time_ms / 1000))
-                        local hours=$((io_time_sec / 3600))
-                        local minutes=$(((io_time_sec % 3600) / 60))
-                        local seconds=$((io_time_sec % 60))
-                        if [ $hours -gt 0 ]; then
-                            io_time=$(printf "%02d:%02d:%02d" $hours $minutes $seconds)
-                        else
-                            io_time=$(printf "%02d:%02d" $minutes $seconds)
-                        fi
-                    fi
-                fi
-
-                # Extract wall-clock duration
-                local test_wall_time=$(grep -A 60 "This is $test_type" "$file" | grep "Wall-clock duration:" | head -1 | sed 's/.*Wall-clock duration: \([0-9]*\)s.*/\1/')
-                if [ -n "$test_wall_time" ] && [ "$test_wall_time" -gt 0 ]; then
-                    local hours=$((test_wall_time / 3600))
-                    local minutes=$(((test_wall_time % 3600) / 60))
-                    local seconds=$((test_wall_time % 60))
+            # Extract I/O time (format: run=300098-300098msec)
+            local test_io_time_ms=$(grep -A 50 "This is $test_type" "$file" | grep "run=" | head -1 | sed 's/.*run=\([0-9]*\)-[0-9]*msec.*/\1/')
+            if [ -n "$test_io_time_ms" ] && [ "$test_io_time_ms" -gt 0 ]; then
+                if [ "$test_io_time_ms" -lt 1000 ]; then
+                    # Sub-second I/O time, display in milliseconds
+                    io_time="${test_io_time_ms}ms"
+                else
+                    local io_time_sec=$((test_io_time_ms / 1000))
+                    local hours=$((io_time_sec / 3600))
+                    local minutes=$(((io_time_sec % 3600) / 60))
+                    local seconds=$((io_time_sec % 60))
                     if [ $hours -gt 0 ]; then
-                        wall_time=$(printf "%02d:%02d:%02d" $hours $minutes $seconds)
-                    elif [ $minutes -gt 0 ]; then
-                        wall_time=$(printf "%02d:%02d" $minutes $seconds)
+                        io_time=$(printf "%02d:%02d:%02d" $hours $minutes $seconds)
                     else
-                        wall_time="${seconds}s"
+                        io_time=$(printf "%02d:%02d" $minutes $seconds)
                     fi
                 fi
-
-                # Extract IOPS
-                local iops=$(grep -A 50 "This is $test_type" "$file" | grep "IOPS=" | head -1 | sed 's/.*IOPS=\([0-9.k]*\).*/\1/')
-                if [[ "$test_type" == randrw ]]; then
-                    # Special handling for randrw - extract both read and write metrics
-                    read_iops=$(grep "read:" "$file" | grep "IOPS=" | head -1 | sed 's/.*IOPS=\([0-9.]*\).*/\1/')
-                    write_iops=$(grep "write:" "$file" | grep "IOPS=" | head -1 | sed 's/.*IOPS=\([0-9.]*\).*/\1/')
-                elif [[ "$test_type" == randread ]] || [[ "$test_type" == read ]]; then
-                    read_iops=$iops
-                elif [[ "$test_type" == randwrite ]] || [[ "$test_type" == write ]]; then
-                    write_iops=$iops
-                fi
-
-                # Extract BW
-                if [[ "$test_type" == randrw ]]; then
-                    read_bw=$(grep "read:" "$file" | grep "BW=" | head -1 | sed 's/.*BW=\([^)]*\).*/\1/' | cut -d' ' -f1)
-                    write_bw=$(grep "write:" "$file" | grep "BW=" | head -1 | sed 's/.*BW=\([^)]*\).*/\1/' | cut -d' ' -f1)
-                elif [[ "$test_type" == randread ]] || [[ "$test_type" == read ]]; then
-                    read_bw=$(grep -A 50 "This is $test_type" "$file" | grep "read:" | sed 's/.*BW=\([^)]*\).*/\1/' | head -1 | cut -d' ' -f1)
-                elif [[ "$test_type" == randwrite ]] || [[ "$test_type" == write ]]; then
-                    write_bw=$(grep -A 50 "This is $test_type" "$file" | grep "write:" | sed 's/.*BW=\([^)]*\).*/\1/' | head -1 | cut -d' ' -f1)
-                fi
-
-                # Extract Lat
-                if [[ "$test_type" == randrw ]]; then
-                    read_lat=$(grep "read:" "$file" -A 20 | grep "clat" | head -1 | sed 's/.*avg=\([0-9.]*\).*/\1/')
-                    write_lat=$(grep "write:" "$file" -A 20 | grep "clat" | head -1 | sed 's/.*avg=\([0-9.]*\).*/\1/')
-                elif [[ "$test_type" == randread ]] || [[ "$test_type" == read ]]; then
-                    read_lat=$(grep -A 50 "This is $test_type" "$file" | grep "read:" -A 20 | grep "clat" | sed 's/.*avg=\([0-9.]*\).*/\1/' | head -1)
-                elif [[ "$test_type" == randwrite ]] || [[ "$test_type" == write ]]; then
-                    write_lat=$(grep -A 50 "This is $test_type" "$file" | grep "write:" -A 20 | grep "clat" | sed 's/.*avg=\([0-9.]*\).*/\1/' | head -1)
-                fi
-
-                # Extract CPU
-                cpu=$(grep -A 50 "This is $test_type" "$file" | grep "cpu" -A 1 | grep "usr=" | head -1 | sed 's/.*usr=\([0-9.]*%\), sys=\([0-9.]*%\).*/usr=\1 sys=\2/')
-            elif [ "$status" = "OK" ]; then
-                # TRIM test completed successfully - extract CPU and I/O time
-                local test_io_time_ms=$(grep -A 50 "This is $test_type" "$file" | grep "run=" | head -1 | sed 's/.*run=\([0-9]*\)-[0-9]*msec.*/\1/')
-                if [ -n "$test_io_time_ms" ] && [ "$test_io_time_ms" -gt 0 ]; then
-                    if [ "$test_io_time_ms" -lt 1000 ]; then
-                        # Sub-second I/O time, display in milliseconds
-                        io_time="${test_io_time_ms}ms"
-                    else
-                        local io_time_sec=$((test_io_time_ms / 1000))
-                        local hours=$((io_time_sec / 3600))
-                        local minutes=$(((io_time_sec % 3600) / 60))
-                        local seconds=$((io_time_sec % 60))
-                        if [ $hours -gt 0 ]; then
-                            io_time=$(printf "%02d:%02d:%02d" $hours $minutes $seconds)
-                        else
-                            io_time=$(printf "%02d:%02d" $minutes $seconds)
-                        fi
-                    fi
-                fi
-
-                # Extract wall-clock duration for TRIM
-                local test_wall_time=$(grep -A 60 "This is $test_type" "$file" | grep "Wall-clock duration:" | head -1 | sed 's/.*Wall-clock duration: \([0-9]*\)s.*/\1/')
-                if [ -n "$test_wall_time" ] && [ "$test_wall_time" -gt 0 ]; then
-                    local hours=$((test_wall_time / 3600))
-                    local minutes=$(((test_wall_time % 3600) / 60))
-                    local seconds=$((test_wall_time % 60))
-                    if [ $hours -gt 0 ]; then
-                        wall_time=$(printf "%02d:%02d:%02d" $hours $minutes $seconds)
-                    elif [ $minutes -gt 0 ]; then
-                        wall_time=$(printf "%02d:%02d" $minutes $seconds)
-                    else
-                        wall_time="${seconds}s"
-                    fi
-                fi
-
-                # Extract CPU for TRIM
-                cpu=$(grep -A 50 "This is $test_type" "$file" | grep "cpu" -A 1 | grep "usr=" | head -1 | sed 's/.*usr=\([0-9.]*%\), sys=\([0-9.]*%\).*/usr=\1 sys=\2/')
             fi
+
+            # Extract wall-clock duration
+            local test_wall_time=$(grep -A 60 "This is $test_type" "$file" | grep "Wall-clock duration:" | head -1 | sed 's/.*Wall-clock duration: \([0-9]*\)s.*/\1/')
+            if [ -n "$test_wall_time" ] && [ "$test_wall_time" -gt 0 ]; then
+                local hours=$((test_wall_time / 3600))
+                local minutes=$(((test_wall_time % 3600) / 60))
+                local seconds=$((test_wall_time % 60))
+                if [ $hours -gt 0 ]; then
+                    wall_time=$(printf "%02d:%02d:%02d" $hours $minutes $seconds)
+                elif [ $minutes -gt 0 ]; then
+                    wall_time=$(printf "%02d:%02d" $minutes $seconds)
+                else
+                    wall_time="${seconds}s"
+                fi
+            fi
+
+            # Extract IOPS
+            local iops=$(grep -A 50 "This is $test_type" "$file" | grep "IOPS=" | head -1 | sed 's/.*IOPS=\([0-9.k]*\).*/\1/')
+            if [[ "$test_type" == randrw ]]; then
+                # Special handling for randrw - extract both read and write metrics
+                read_iops=$(grep "read:" "$file" | grep "IOPS=" | head -1 | sed 's/.*IOPS=\([0-9.]*\).*/\1/')
+                write_iops=$(grep "write:" "$file" | grep "IOPS=" | head -1 | sed 's/.*IOPS=\([0-9.]*\).*/\1/')
+            elif [[ "$test_type" == randread ]] || [[ "$test_type" == read ]]; then
+                read_iops=$iops
+            elif [[ "$test_type" == randwrite ]] || [[ "$test_type" == write ]]; then
+                write_iops=$iops
+            fi
+
+            # Extract BW
+            if [[ "$test_type" == randrw ]]; then
+                read_bw=$(grep "read:" "$file" | grep "BW=" | head -1 | sed 's/.*BW=\([^)]*\).*/\1/' | cut -d' ' -f1)
+                write_bw=$(grep "write:" "$file" | grep "BW=" | head -1 | sed 's/.*BW=\([^)]*\).*/\1/' | cut -d' ' -f1)
+            elif [[ "$test_type" == randread ]] || [[ "$test_type" == read ]]; then
+                read_bw=$(grep -A 50 "This is $test_type" "$file" | grep "read:" | sed 's/.*BW=\([^)]*\).*/\1/' | head -1 | cut -d' ' -f1)
+            elif [[ "$test_type" == randwrite ]] || [[ "$test_type" == write ]]; then
+                write_bw=$(grep -A 50 "This is $test_type" "$file" | grep "write:" | sed 's/.*BW=\([^)]*\).*/\1/' | head -1 | cut -d' ' -f1)
+            fi
+
+            # Extract Lat
+            if [[ "$test_type" == randrw ]]; then
+                read_lat=$(grep "read:" "$file" -A 20 | grep "clat" | head -1 | sed 's/.*avg=\([0-9.]*\).*/\1/')
+                write_lat=$(grep "write:" "$file" -A 20 | grep "clat" | head -1 | sed 's/.*avg=\([0-9.]*\).*/\1/')
+            elif [[ "$test_type" == randread ]] || [[ "$test_type" == read ]]; then
+                read_lat=$(grep -A 50 "This is $test_type" "$file" | grep "read:" -A 20 | grep "clat" | sed 's/.*avg=\([0-9.]*\).*/\1/' | head -1)
+            elif [[ "$test_type" == randwrite ]] || [[ "$test_type" == write ]]; then
+                write_lat=$(grep -A 50 "This is $test_type" "$file" | grep "write:" -A 20 | grep "clat" | sed 's/.*avg=\([0-9.]*\).*/\1/' | head -1)
+            fi
+
+            # Extract CPU
+            cpu=$(grep -A 50 "This is $test_type" "$file" | grep "cpu" -A 1 | grep "usr=" | head -1 | sed 's/.*usr=\([0-9.]*%\), sys=\([0-9.]*%\).*/usr=\1 sys=\2/')
 
             [ -z "$read_iops" ] && read_iops="N/A"
             [ -z "$write_iops" ] && write_iops="N/A"
@@ -562,9 +486,9 @@ summarize_results() {
 }
 
 run_individual_tests() {
-    local test_types=("randread" "randwrite" "read" "write" "randrw" "trim")
+    local test_types=("randread" "randwrite" "read" "write" "randrw")
     local block_sizes=("4k" "64k" "1M" "512k")
-    local type_vars=("RANDREAD" "RANDWRITE" "READ" "WRITE" "RANDRW" "TRIM")
+    local type_vars=("RANDREAD" "RANDWRITE" "READ" "WRITE" "RANDRW")
     local size_vars=("BS_4K" "BS_64K" "BS_1M" "BS_512K")
 
     local i j
@@ -578,11 +502,6 @@ run_individual_tests() {
                 local size_var="${size_vars[$j]}"
 
                 if [ "${!size_var}" = true ]; then
-                    # Skip invalid combinations (trim only supports 4k)
-                    if [ "$test_type" = "trim" ] && [ "$block_size" != "4k" ]; then
-                        continue
-                    fi
-
                     # Generate unique output filename
                     local output_file="${RESULTS_DIR}/bm_${test_type}_${block_size}_individual.txt"
 
@@ -597,8 +516,6 @@ run_individual_tests() {
                         current_test_name="Read ${block_size}"
                     elif [ "$test_type" = "write" ]; then
                         current_test_name="Write ${block_size}"
-                    elif [ "$test_type" = "trim" ]; then
-                        current_test_name="Trim ${block_size}"
                     fi
 
                     # Determine testtype parameter
@@ -666,12 +583,6 @@ elif [ "$FULL" = true ]; then
     current_test_name="Randrw 4k"
     do_disk_test "4k" "${RESULTS_DIR}/bm_randrw.txt" "randrw:rwmixread=70" false $CONC_JOBS $CONC_IODEPTH
 
-    # Trim for SSD
-    if [ "$SSD" = true ]; then
-        current_test_name="Trim 4k"
-        do_disk_test "4k" "${RESULTS_DIR}/bm_trim.txt" "trim" false $CONC_JOBS $CONC_IODEPTH
-    fi
-
     # Full mode: additional 512k tests
     RUNTIME=300
     current_test_name="Random Read 512k"
@@ -719,12 +630,6 @@ else
     RUNTIME=$LEAN_RUNTIME
     current_test_name="Randrw 4k"
     do_disk_test "4k" "${RESULTS_DIR}/bm_randrw.txt" "randrw:rwmixread=70" false $CONC_JOBS $CONC_IODEPTH
-
-    # Trim for SSD
-    if [ "$SSD" = true ]; then
-        current_test_name="Trim 4k"
-        do_disk_test "4k" "${RESULTS_DIR}/bm_trim.txt" "trim" false $CONC_JOBS $CONC_IODEPTH
-    fi
 fi
 
 # Generate summary
