@@ -17,7 +17,9 @@ class JsonStorage:
         """Save results as JSON"""
         timestamp = datetime.now().isoformat()
 
-        if config.mode == "individual":
+        # Handle both enum and string mode values
+        mode_value = config.mode.value if hasattr(config.mode, "value") else str(config.mode)
+        if mode_value == "individual":
             # Separate JSON files for individual tests
             for result in results:
                 test_name = f"{result['test_type']}_{result['block_size']}"
@@ -56,7 +58,7 @@ class JsonStorage:
 
             with open(output_file, "w") as f:
                 json.dump(
-                    {"timestamp": timestamp, "mode": config.mode, "results": results},
+                    {"timestamp": timestamp, "mode": mode_value, "results": results},
                     f,
                     indent=2,
                 )

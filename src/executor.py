@@ -2,7 +2,6 @@
 
 import json
 import subprocess
-import tempfile
 import platform
 import time
 import threading
@@ -15,7 +14,6 @@ from rich.progress import (
     SpinnerColumn,
     TextColumn,
     BarColumn,
-    TimeElapsedColumn,
     TaskProgressColumn,
 )
 

@@ -22,7 +22,8 @@ class Statistics:
             "write_bw",
             "read_latency_us",
             "write_latency_us",
-            "runtime_sec",
+            "io_time_sec",
+            "wall_time_sec",
         ]
 
         stats = {}
@@ -67,7 +68,8 @@ class Statistics:
             "write_bw",
             "read_latency_us",
             "write_latency_us",
-            "runtime_sec",
+            "io_time_sec",
+            "wall_time_sec",
         ]
 
         for test_type in df["test_type"].unique():

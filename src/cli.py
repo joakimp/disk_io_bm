@@ -20,23 +20,21 @@ def disk_benchmark():
 @click.option("--concurrency", is_flag=True, help="High concurrency mode")
 @click.option(
     "--test-type",
-    "test-type",
+    "test_type",
     multiple=True,
     type=click.Choice(["randread", "randwrite", "read", "write", "randrw", "trim"]),
     help="Individual test types",
 )
 @click.option(
     "--block-size",
-    "block-size",
+    "block_size",
     multiple=True,
     type=click.Choice(["4k", "64k", "1M", "512k"]),
     help="Block sizes for individual tests",
 )
 @click.option("--runtime", type=int, default=300, help="Test runtime in seconds")
 @click.option("--filesize", type=str, default="10G", help="File size for fio")
-@click.option(
-    "--output-dir", type=click.Path, default="results", help="Output directory"
-)
+@click.option("--output-dir", type=click.Path, default="results", help="Output directory")
 @click.option(
     "--output-format",
     type=click.Choice(["table", "json", "csv"]),
@@ -64,7 +62,7 @@ def disk_benchmark():
 @click.option("--plots", is_flag=True, help="Generate plots")
 @click.option(
     "--plot-types",
-    "plot-types",
+    "plot_types",
     multiple=True,
     type=click.Choice(["bar", "line", "heatmap", "scatter", "box", "radar"]),
     default=["bar"],
@@ -152,6 +150,27 @@ def main(
     elif output_format == "json":
         formatter = JsonFormatter(json_output_dir)
         formatter.format(results)
+
+    # Generate plots if requested
+    if plots and results:
+        from src.plots import PlotlyPlotter
+
+        plot_config = {
+            "plot_types": list(plot_types),
+            "plot_output_dir": plot_output_dir,
+        }
+        plotter = PlotlyPlotter(results, plot_config)
+        plotter.generate()
+        console.print(f"Plots saved to {plot_output_dir}/")
+
+        if interactive_plots:
+            # Open the first generated plot in browser
+            from pathlib import Path
+
+            plot_dir = Path(plot_output_dir)
+            html_files = list(plot_dir.glob("*.html"))
+            if html_files:
+                plotter.open_in_browser(str(html_files[0]))
 
     console.print("Benchmark completed!")
     console.print(f"Results saved to {output_dir}/")
