@@ -5,11 +5,19 @@ import subprocess
 import tempfile
 import platform
 import time
+import threading
 from pathlib import Path
 from typing import List, Optional
 
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeRemainingColumn
+from rich.progress import (
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    BarColumn,
+    TimeElapsedColumn,
+    TaskProgressColumn,
+)
 
 from src.config import BenchmarkConfig, Mode
 
@@ -28,89 +36,58 @@ class BenchmarkExecutor:
     def run_all_tests(self) -> List[dict]:
         """Run all benchmarks based on mode"""
         results = []
+        test_configs = self._get_test_configs()
+        total_tests = len(test_configs)
+        runtime = self.config.runtime
 
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
-            TimeRemainingColumn(),
+            TaskProgressColumn(),
+            TextColumn(
+                "[cyan]{task.fields[elapsed]:.0f}s[/cyan] / [cyan]{task.fields[total_time]}s[/cyan]"
+            ),
             console=self.console,
+            refresh_per_second=2,
         ) as progress:
-            test_configs = self._get_test_configs()
-            total_tests = len(test_configs)
-
             for idx, test_config in enumerate(test_configs):
+                description = f"[{idx + 1}/{total_tests}] {test_config['test_type']} ({test_config['block_size']})"
                 task = progress.add_task(
-                    f"Running {test_config['test_type']} ({test_config['block_size']})",
-                    total=total_tests,
+                    description,
+                    total=runtime,
+                    elapsed=0,
+                    total_time=runtime,
                 )
 
-                result = self._run_single_test(test_config)
+                result = self._run_single_test_with_progress(test_config, progress, task, runtime)
                 if result:
                     results.append(result)
 
-                progress.update(task, advance=1)
+                # Mark task as complete
+                progress.update(task, completed=runtime, elapsed=runtime)
 
         return results
 
-    def _get_test_configs(self) -> List[dict]:
-        """Get list of test configurations based on mode"""
-        configs = []
-
-        if self.config.mode == Mode.TEST:
-            configs = [
-                {"test_type": "randread", "block_size": "4k"},
-                {"test_type": "randwrite", "block_size": "64k"},
-                {"test_type": "read", "block_size": "1M"},
-            ]
-        elif self.config.mode == Mode.LEAN:
-            configs = [
-                {"test_type": "randread", "block_size": "4k"},
-                {"test_type": "randwrite", "block_size": "4k"},
-                {"test_type": "read", "block_size": "4k"},
-                {"test_type": "write", "block_size": "4k"},
-                {"test_type": "randread", "block_size": "64k"},
-                {"test_type": "randwrite", "block_size": "64k"},
-                {"test_type": "read", "block_size": "64k"},
-                {"test_type": "write", "block_size": "64k"},
-                {"test_type": "randread", "block_size": "1M"},
-                {"test_type": "randwrite", "block_size": "1M"},
-                {"test_type": "read", "block_size": "1M"},
-                {"test_type": "write", "block_size": "1M"},
-                {"test_type": "randrw", "block_size": "4k"},
-            ]
-        elif self.config.mode == Mode.FULL:
-            block_sizes = ["4k", "64k", "1M", "512k"]
-            for block_size in block_sizes:
-                configs.extend(
-                    [
-                        {"test_type": "randread", "block_size": block_size},
-                        {"test_type": "randwrite", "block_size": block_size},
-                        {"test_type": "read", "block_size": block_size},
-                        {"test_type": "write", "block_size": block_size},
-                    ]
-                )
-            configs.append({"test_type": "randrw", "block_size": "4k"})
-        elif self.config.mode == Mode.INDIVIDUAL:
-            if not self.config.test_types or not self.config.block_sizes:
-                self.console.print(
-                    "[yellow]Individual mode requires --test-type and --block-size[/yellow]"
-                )
-                return []
-            for test_type in self.config.test_types:
-                for block_size in self.config.block_sizes:
-                    if test_type == "trim" and block_size != "4k":
-                        continue
-                    configs.append({"test_type": test_type, "block_size": block_size})
-
-        return configs
-
-    def _run_single_test(self, test_config: dict) -> Optional[dict]:
-        """Run a single FIO test"""
+    def _run_single_test_with_progress(
+        self, test_config: dict, progress: Progress, task, runtime: int
+    ) -> Optional[dict]:
+        """Run a single FIO test with progress updates"""
         test_file = self.temp_dir / f"test_{test_config['test_type']}_{test_config['block_size']}"
-
-        # Record wall-clock start time
         wall_start = time.time()
+        stop_progress = threading.Event()
+
+        def update_progress():
+            """Background thread to update progress bar"""
+            while not stop_progress.is_set():
+                elapsed = time.time() - wall_start
+                # Cap at runtime to avoid showing more than 100%
+                progress.update(task, completed=min(elapsed, runtime), elapsed=elapsed)
+                stop_progress.wait(0.5)
+
+        # Start progress updater thread
+        progress_thread = threading.Thread(target=update_progress, daemon=True)
+        progress_thread.start()
 
         try:
             cmd = self._build_fio_command(test_config, test_file)
@@ -123,7 +100,6 @@ class BenchmarkExecutor:
                 timeout=self.config.runtime + 60,
             )
 
-            # Calculate wall-clock duration
             wall_time_sec = round(time.time() - wall_start, 2)
 
             if result.returncode == 0:
@@ -201,8 +177,64 @@ class BenchmarkExecutor:
                 "wall_time_sec": wall_time_sec,
             }
         finally:
+            # Stop progress thread
+            stop_progress.set()
+            progress_thread.join(timeout=1)
+
             if test_file.exists():
                 test_file.unlink()
+
+    def _get_test_configs(self) -> List[dict]:
+        """Get list of test configurations based on mode"""
+        configs = []
+
+        if self.config.mode == Mode.TEST:
+            configs = [
+                {"test_type": "randread", "block_size": "4k"},
+                {"test_type": "randwrite", "block_size": "64k"},
+                {"test_type": "read", "block_size": "1M"},
+            ]
+        elif self.config.mode == Mode.LEAN:
+            configs = [
+                {"test_type": "randread", "block_size": "4k"},
+                {"test_type": "randwrite", "block_size": "4k"},
+                {"test_type": "read", "block_size": "4k"},
+                {"test_type": "write", "block_size": "4k"},
+                {"test_type": "randread", "block_size": "64k"},
+                {"test_type": "randwrite", "block_size": "64k"},
+                {"test_type": "read", "block_size": "64k"},
+                {"test_type": "write", "block_size": "64k"},
+                {"test_type": "randread", "block_size": "1M"},
+                {"test_type": "randwrite", "block_size": "1M"},
+                {"test_type": "read", "block_size": "1M"},
+                {"test_type": "write", "block_size": "1M"},
+                {"test_type": "randrw", "block_size": "4k"},
+            ]
+        elif self.config.mode == Mode.FULL:
+            block_sizes = ["4k", "64k", "1M", "512k"]
+            for block_size in block_sizes:
+                configs.extend(
+                    [
+                        {"test_type": "randread", "block_size": block_size},
+                        {"test_type": "randwrite", "block_size": block_size},
+                        {"test_type": "read", "block_size": block_size},
+                        {"test_type": "write", "block_size": block_size},
+                    ]
+                )
+            configs.append({"test_type": "randrw", "block_size": "4k"})
+        elif self.config.mode == Mode.INDIVIDUAL:
+            if not self.config.test_types or not self.config.block_sizes:
+                self.console.print(
+                    "[yellow]Individual mode requires --test-type and --block-size[/yellow]"
+                )
+                return []
+            for test_type in self.config.test_types:
+                for block_size in self.config.block_sizes:
+                    if test_type == "trim" and block_size != "4k":
+                        continue
+                    configs.append({"test_type": test_type, "block_size": block_size})
+
+        return configs
 
     def _build_fio_command(self, test_config: dict, test_file: Path) -> List[str]:
         """Build FIO command for a test"""
