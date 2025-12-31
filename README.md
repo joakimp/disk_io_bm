@@ -38,7 +38,7 @@ uv run disk-benchmark-py run --mode test
 | Feature | Bash | Python |
 |---------|-------|--------|
 | Test Modes | test, lean, full, individual | Same |
-| Test Types | 6 types (randread, randwrite, read, write, randrw, trim) | Same |
+| Test Types | 5 types (randread, randwrite, read, write, randrw) | Same |
 | Block Sizes | 4 sizes (4k, 64k, 1M, 512k) | Same |
 | Progress | ASCII bar | Rich progress bars |
 | Output | Text + ASCII table | Table/JSON/CSV formats |

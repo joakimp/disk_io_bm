@@ -24,7 +24,7 @@ Feature-rich Python disk I/O benchmarking tool using fio. Extensible with multip
 - **Custom Queries**: Execute SQL queries on benchmark database
 - **Analytics**: Statistical analysis and run comparison
 - **Progress**: Rich progress bars with current test, elapsed time, estimated remaining
-- **Error Handling**: Graceful handling of FIO failures, timeouts, TRIM warnings
+- **Error Handling**: Graceful handling of FIO failures and timeouts
 
 ## Installation
 
@@ -124,7 +124,7 @@ These parameters optimize I/O submission batching, which can significantly impro
 **Individual Test Types:**
 ```bash
 # Test types
-uv run disk-benchmark-py run --test-type randread --test-type randwrite --test-type read --test-type write --test-type randrw --test-type trim
+uv run disk-benchmark-py run --test-type randread --test-type randwrite --test-type read --test-type write --test-type randrw
 
 # Block sizes
 uv run disk-benchmark-py run --block-size 4k --block-size 64k --block-size 1M --block-size 512k
@@ -654,14 +654,6 @@ error: failed to setup shm segment
 ```
 
 **Solution**: The Python tool detects macOS and uses the psync engine, avoiding this issue.
-
-**TRIM on regular files:**
-```
-WARNING: TRIM test requires a block device, not a regular file.
-SKIPPED: TRIM requires block device, not regular file (file_path)
-```
-
-This is expected behavior. TRIM only works on block devices.
 
 ### Slow Disk Timeouts
 

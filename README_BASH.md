@@ -12,11 +12,11 @@ Lightweight bash-based disk I/O benchmarking tool using fio. Ideal for systems w
 ## Features
 
 - **Test Modes**: test, lean (default), full, individual
-- **Test Types**: randread, randwrite, read, write, randrw, trim
+- **Test Types**: randread, randwrite, read, write, randrw
 - **Block Sizes**: 4k, 64k, 1M, 512k
 - **Output**: Text files with formatted summary
 - **Progress**: ASCII progress bar with elapsed/estimated time
-- **Enhancements**: Direct I/O, latency tracking, mixed RandRW, trim tests
+- **Enhancements**: Direct I/O, latency tracking, mixed RandRW
 
 ## Installation
 
@@ -69,7 +69,7 @@ No other dependencies required - just bash and fio!
 **Test type modifiers:**
 
 ```bash
-./fio_benchmark.sh --ssd                           # Enable SSD-specific tests (trim)
+./fio_benchmark.sh --ssd                           # Enable SSD-specific optimizations
 ./fio_benchmark.sh --concurrency                   # High concurrency mode
 ```
 
@@ -82,7 +82,6 @@ No other dependencies required - just bash and fio!
 ./fio_benchmark.sh --read        # Sequential read tests
 ./fio_benchmark.sh --write       # Sequential write tests
 ./fio_benchmark.sh --randrw       # Mixed random read/write (70/30 split) tests
-./fio_benchmark.sh --trim        # Trim tests (requires --ssd)
 
 # Block sizes
 ./fio_benchmark.sh --4k           # 4k block size
@@ -102,9 +101,6 @@ No other dependencies required - just bash and fio!
 
 # Run mixed random read/write tests on all block sizes
 ./fio_benchmark.sh --randrw --4k --64k --1M --512k
-
-# Run trim test with SSD flag
-./fio_benchmark.sh --trim --4k --ssd
 
 # Run multiple test types with concurrency
 ./fio_benchmark.sh --randread --randwrite --4k --64k --concurrency
@@ -130,20 +126,20 @@ No other dependencies required - just bash and fio!
 ### Lean Mode (Default)
 
 Runs original tests with enhancements:
-- Tests: 4 block sizes (4k, 64k, 1M) × 4 core tests + randrw
-- Runtime: 60s for additional tests (randrw, trim)
-- Total: ~14 tests
+- Tests: 3 block sizes (4k, 64k, 1M) × 4 core tests + randrw
+- Runtime: 60s for randrw test
+- Total: ~13 tests
 - Duration: ~1-1.25 hours
-- Includes: randrw (70/30 mix), trim (with --ssd flag)
+- Includes: randrw (70/30 mix)
 
 ### Full Mode
 
 Comprehensive testing:
 - Tests: 4 block sizes (4k, 64k, 1M, 512k) × 4 core tests + randrw
-- Runtime: 300s for additional tests (randrw, trim)
-- Total: ~18 tests
+- Runtime: 300s for randrw test
+- Total: ~17 tests
 - Duration: ~2-3 hours
-- Includes: randrw (70/30 mix), trim (with --ssd flag)
+- Includes: randrw (70/30 mix)
 
 ### Test Mode
 
@@ -164,8 +160,6 @@ Run specific test types on selected block sizes:
 ## Notes
 
 - Individual test flags must be combined with at least one block size flag
-- Trim tests only support 4k block size
-- **TRIM requires block device, not regular files.** When run on a regular file (default), test will be skipped with a warning in the Status column
 - Individual tests create separate output files: `bm_<type>_<size>_individual.txt`
 - Progress bar is disabled in individual test mode; elapsed and estimated remaining time are shown
 - Use `--quick` flag for fast testing (1G file, 15s runtime)
