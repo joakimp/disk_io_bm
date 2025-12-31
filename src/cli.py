@@ -98,6 +98,8 @@ def main(
     history,
 ):
     """Run disk I/O benchmarks with fio"""
+    import time
+
     from src.executor import BenchmarkExecutor
     from src.storage import SQLiteStorage, JsonStorage
     from src.formatters import TableFormatter, JsonFormatter
@@ -129,8 +131,11 @@ def main(
     else:
         database_backend = StorageBackend.SQLITE
 
+    # Run benchmarks and track total time
+    start_time = time.time()
     executor = BenchmarkExecutor(config)
     results = executor.run_all_tests()
+    total_wall_time = time.time() - start_time
 
     # Store results
     if database_backend != StorageBackend.NONE:
@@ -150,6 +155,17 @@ def main(
     elif output_format == "json":
         formatter = JsonFormatter(json_output_dir)
         formatter.format(results)
+
+    # Display total runtime
+    minutes, seconds = divmod(int(total_wall_time), 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours > 0:
+        time_str = f"{hours}h {minutes}m {seconds}s"
+    elif minutes > 0:
+        time_str = f"{minutes}m {seconds}s"
+    else:
+        time_str = f"{seconds}s"
+    console.print(f"\nTotal runtime: [bold cyan]{time_str}[/bold cyan]")
 
     # Generate plots if requested
     if plots and results:
