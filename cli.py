@@ -157,8 +157,12 @@ def run(**kwargs):
         return
 
     # Run benchmarks
+    import time
+
+    start_time = time.time()
     executor = BenchmarkExecutor(config, console)
     results = executor.run_all_tests()
+    total_wall_time = time.time() - start_time
 
     # Store results
     if config.database != StorageBackend.NONE:
@@ -185,6 +189,17 @@ def run(**kwargs):
     elif config.output_format == "excel":
         formatter = ExcelFormatter("results/benchmark_results.xlsx")
         formatter.format(results)
+
+    # Display total runtime
+    minutes, seconds = divmod(int(total_wall_time), 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours > 0:
+        time_str = f"{hours}h {minutes}m {seconds}s"
+    elif minutes > 0:
+        time_str = f"{minutes}m {seconds}s"
+    else:
+        time_str = f"{seconds}s"
+    console.print(f"\nTotal runtime: [bold cyan]{time_str}[/bold cyan]")
 
     # Generate plots if requested
     if config.generate_plots and results:
@@ -258,11 +273,26 @@ def test(**kwargs):
     config = BenchmarkConfig.from_dict(config_data)
 
     console.print("[blue]Running test benchmark...[/blue]")
+    import time
+
+    start_time = time.time()
     executor = BenchmarkExecutor(config, console)
     results = executor.run_all_tests()
+    total_wall_time = time.time() - start_time
 
     formatter = TableFormatter(console)
     formatter.format(results)
+
+    # Display total runtime
+    minutes, seconds = divmod(int(total_wall_time), 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours > 0:
+        time_str = f"{hours}h {minutes}m {seconds}s"
+    elif minutes > 0:
+        time_str = f"{minutes}m {seconds}s"
+    else:
+        time_str = f"{seconds}s"
+    console.print(f"\nTotal runtime: [bold cyan]{time_str}[/bold cyan]")
 
 
 @main.command()
