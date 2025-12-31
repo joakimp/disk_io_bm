@@ -167,6 +167,80 @@ uv run ruff check cli.py src/
 uv run mypy cli.py --config-file=pyproject.toml
 ```
 
+## Benchmarking Considerations
+
+When running disk I/O benchmarks, several factors affect the accuracy and reliability of your results. Understanding these helps you choose appropriate test parameters and interpret results correctly.
+
+### File Size and Caching Effects
+
+The test file size is one of the most critical parameters affecting benchmark accuracy.
+
+**Caching layers that can skew results:**
+
+| Cache Type | Typical Size | Impact |
+|------------|--------------|--------|
+| OS Page Cache (RAM) | All available RAM | Read tests may measure memory speed instead of disk |
+| SSD DRAM Cache | 256MB - 2GB | Hot data served from fast DRAM |
+| SSD SLC Cache | 10GB - 100GB+ | Burst writes 2-5x faster than sustained |
+| HDD Buffer | 64MB - 256MB | Small sequential operations cached |
+
+**Recommendations by use case:**
+
+| Scenario | Recommended File Size | Notes |
+|----------|----------------------|-------|
+| Quick validation | 1GB | Just verify the tool works |
+| Typical benchmarking | 2x RAM or 10GB minimum | Minimizes page cache effects |
+| Enterprise/datacenter | 2x RAM or 50GB+ | More representative of production |
+| NVMe SSD testing | Larger than SLC cache + 2x RAM | Measures sustained, not burst performance |
+
+**This tool's defaults:**
+- `--mode test`: 1GB file, 15s runtime - Quick validation only
+- `--mode lean/full`: 10GB file, 300s runtime - Suitable for systems with ≤4GB RAM
+
+For systems with more RAM, consider using `--filesize 20G` or larger to ensure you're measuring actual disk performance rather than cache performance.
+
+### Impact on Statistics
+
+| Aspect | Smaller File (cached) | Larger File (uncached) |
+|--------|----------------------|------------------------|
+| **Mean IOPS/bandwidth** | Inflated (cache hits) | Representative of sustained performance |
+| **Variance** | Artificially low | Higher, reflects real-world variability |
+| **Confidence intervals** | Narrower but misleading | Wider but accurate |
+| **Reproducibility** | High but not meaningful | May vary between runs |
+
+### SSD-Specific Considerations
+
+Modern SSDs have complex performance characteristics:
+
+- **SLC Cache**: Consumer SSDs often write to fast pseudo-SLC cache first, then migrate to slower TLC/QLC. Small file tests may complete entirely within SLC cache, showing 2-5x inflated write speeds.
+- **Garbage Collection**: Small tests may not trigger GC cycles, hiding performance degradation that occurs in real workloads.
+- **Thermal Throttling**: Short tests may not reveal throttling that occurs during sustained operations.
+
+### When Smaller Files Are Acceptable
+
+- Quick validation that fio and the benchmark tool are working
+- Comparing relative performance between configurations (if both use same parameters)
+- Testing workloads that genuinely operate on small files
+- Reducing SSD wear during repeated testing
+- CI/CD pipeline smoke tests
+
+### Runtime Duration
+
+The `--runtime` parameter also affects result quality:
+
+- **15 seconds**: Minimum for quick tests; high variance between runs
+- **60 seconds**: Reasonable for most comparisons
+- **300 seconds** (default): Good balance of accuracy and time
+- **600+ seconds**: Better for detecting thermal throttling and GC effects
+
+### General Best Practices
+
+1. **Consistent parameters**: When comparing results, always use identical file size, runtime, and block sizes
+2. **Multiple runs**: Run benchmarks 2-3 times to verify consistency
+3. **Idle system**: Close unnecessary applications to reduce interference
+4. **Fresh state**: For SSDs, consider running a TRIM operation before benchmarking
+5. **Temperature**: Allow drives to cool between intensive test runs
+
 ## Choosing Between Tools
 
 ### Use Bash (`fio_benchmark.sh`) when:
