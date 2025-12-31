@@ -205,6 +205,10 @@ uv run disk-benchmark-py run --runtime 600
 # Custom file size
 uv run disk-benchmark-py run --filesize 20G
 
+# Custom timeout per test (useful for slow disks)
+# 0 = auto-calculate based on filesize (default)
+uv run disk-benchmark-py run --timeout 1800
+
 # Custom database path
 uv run disk-benchmark-py run --db-path /custom/path/benchmark.db
 
@@ -658,6 +662,40 @@ SKIPPED: TRIM requires block device, not regular file (file_path)
 ```
 
 This is expected behavior. TRIM only works on block devices.
+
+### Slow Disk Timeouts
+
+**Symptom**: Read tests (`randread`, `read`) time out with status `TIMED OUT` while write tests complete successfully.
+
+```
+┃ Test Type ┃ ... ┃ Status    ┃
+│ randread  │ ... │ TIMED OUT │
+│ randwrite │ ... │ OK        │
+│ read      │ ... │ TIMED OUT │
+│ write     │ ... │ OK        │
+```
+
+**Cause**: For read tests, fio must first create the test file before it can read from it. On slow disks (HDDs, network storage, or heavily loaded systems), creating a large test file (e.g., 10GB) can take several minutes. The original fixed timeout wasn't long enough to accommodate both file creation and the actual benchmark.
+
+**Solution**: The tool now automatically handles this in two ways:
+
+1. **Smart timeout calculation**: The timeout is automatically calculated based on the file size, assuming a worst-case write speed of 10 MB/s for file creation:
+   - 10GB file + 300s runtime → ~23 minute timeout
+   - 1GB file + 300s runtime → ~8 minute timeout
+
+2. **Pre-creation of test files**: For read tests, the tool pre-creates the test file before running the benchmark, separating file creation time from the actual benchmark measurement.
+
+**Manual override**: If you still experience timeouts, you can manually set a longer timeout:
+
+```bash
+# Set a 30-minute (1800 second) timeout per test
+uv run disk-benchmark-py run --mode full --timeout 1800
+
+# Or use smaller file size for faster tests on slow disks
+uv run disk-benchmark-py run --mode full --filesize 1G
+```
+
+**Note**: The `--timeout 0` (default) means auto-calculate based on filesize. Any positive value overrides the automatic calculation.
 
 ### Testing Issues
 
