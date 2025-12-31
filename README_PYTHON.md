@@ -16,7 +16,7 @@ Feature-rich Python disk I/O benchmarking tool using fio. Extensible with multip
 - **Test Modes**: test, lean (default), full, individual
 - **Test Types**: randread, randwrite, read, write, randrw, trim
 - **Block Sizes**: 4k, 64k, 1M, 512k
-- **Flags**: --ssd, --hdd, --concurrency, --quick, --filesize
+- **Flags**: --ssd (TRIM test + queue optimization), --concurrency, --quick, --filesize
 - **Output Formats**: table (default), json, csv, excel
 - **Storage Backends**: SQLite (default), JSON, CSV, none
 - **Plot Generation**: Interactive Plotly plots (bar, scatter, radar, line)
@@ -96,13 +96,10 @@ uv run disk-benchmark-py run --mode individual
 
 **Test Type Modifiers:**
 ```bash
-# Enable SSD-specific tests (trim)
+# Enable SSD-specific optimizations (see below for details)
 uv run disk-benchmark-py run --ssd
 
-# Enable HDD-specific tests
-uv run disk-benchmark-py run --hdd
-
-# Enable high concurrency
+# Enable high concurrency (4 jobs, iodepth 16 - Linux only)
 uv run disk-benchmark-py run --concurrency
 
 # Quick mode (1G file, 15s runtime)
@@ -111,6 +108,20 @@ uv run disk-benchmark-py run --quick
 # Combine flags
 uv run disk-benchmark-py run --mode full --ssd --concurrency
 ```
+
+**`--ssd` Flag Details:**
+
+The `--ssd` flag enables SSD-specific tests and optimizations:
+
+1. **Adds TRIM test**: In `lean` and `full` modes, adds a `trim` test with 4k block size. TRIM tests the SSD's ability to mark blocks as unused, which is important for maintaining SSD performance over time. Note: TRIM only works on block devices, not regular files.
+
+2. **Queue depth optimization** (Linux only): Adds FIO parameters for better SSD queue handling:
+   - `--iodepth_batch_submit_max=32`
+   - `--iodepth_batch_complete_max=32`
+   
+   These parameters optimize I/O submission batching, which can significantly improve performance on SSDs that handle high queue depths well.
+
+**Note:** The `--hdd` flag is currently defined but has no effect. It is reserved for future HDD-specific optimizations.
 
 **Individual Test Types:**
 ```bash
@@ -673,7 +684,7 @@ brew install fio
 | Test Modes | test, lean, full, individual | Same |
 | Test Types | 6 types | Same |
 | Block Sizes | 4 sizes | Same |
-| Flags | --ssd, --hdd, --concurrency, --quick, --filesize | Same |
+| Flags | --ssd, --concurrency, --quick, --filesize | Same |
 | Progress | ASCII bar | Rich progress bars |
 | Output | Text + ASCII table | Table/JSON/CSV |
 | Storage | Text files only | SQLite database + JSON + CSV files |
