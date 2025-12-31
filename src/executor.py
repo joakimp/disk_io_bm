@@ -20,6 +20,17 @@ from rich.progress import (
 from src.config import BenchmarkConfig, Mode
 
 
+def _format_time_hhmmss(seconds: float) -> str:
+    """Format seconds as HH:MM:SS or MM:SS if under an hour"""
+    total_secs = int(seconds)
+    hours, remainder = divmod(total_secs, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours > 0:
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    else:
+        return f"{minutes:02d}:{secs:02d}"
+
+
 class BenchmarkExecutor:
     """Execute FIO benchmark tests"""
 
@@ -38,42 +49,90 @@ class BenchmarkExecutor:
         total_tests = len(test_configs)
         runtime = self.config.runtime
 
+        if total_tests == 0:
+            self.console.print("[yellow]No tests to run[/yellow]")
+            return results
+
+        # Estimate total runtime (runtime per test * number of tests)
+        # Add ~10% overhead for file creation, cleanup, etc.
+        estimated_total_seconds = total_tests * runtime * 1.1
+        estimated_total_str = _format_time_hhmmss(estimated_total_seconds)
+
+        self.console.print(f"\n[bold]Starting {total_tests} benchmark tests[/bold]")
+        self.console.print(
+            f"[dim]Estimated total runtime: ~{estimated_total_str} "
+            f"({total_tests} tests × {runtime}s each)[/dim]\n"
+        )
+
+        overall_start_time = time.time()
+
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
+            BarColumn(complete_style="magenta", finished_style="green"),
             TaskProgressColumn(),
             TextColumn("{task.fields[time_display]}"),
             console=self.console,
             refresh_per_second=2,
         ) as progress:
+            # Create overall progress task (magenta colored)
+            overall_task = progress.add_task(
+                "[bold magenta]Overall progress[/bold magenta]",
+                total=estimated_total_seconds,
+                time_display=f"[magenta]00:00[/magenta] / [magenta]~{estimated_total_str}[/magenta]",
+            )
+
             for idx, test_config in enumerate(test_configs):
-                description = f"[{idx + 1}/{total_tests}] {test_config['test_type']} ({test_config['block_size']})"
+                # Individual test progress (cyan colored)
+                description = f"  [{idx + 1}/{total_tests}] {test_config['test_type']} ({test_config['block_size']})"
                 task = progress.add_task(
                     description,
                     total=runtime,
-                    time_display=f"[cyan]0s[/cyan] / [cyan]~{runtime}s[/cyan]",
+                    time_display=f"[cyan]00:00[/cyan] / [cyan]~{_format_time_hhmmss(runtime)}[/cyan]",
                 )
 
                 result, wall_time = self._run_single_test_with_progress(
-                    test_config, progress, task, runtime
+                    test_config,
+                    progress,
+                    task,
+                    runtime,
+                    overall_task,
+                    overall_start_time,
+                    estimated_total_seconds,
                 )
                 if result:
                     results.append(result)
 
-                # Update to show actual wall time when complete
-                actual_time = int(wall_time)
+                # Update individual test to show actual wall time when complete
+                actual_time_str = _format_time_hhmmss(wall_time)
                 progress.update(
                     task,
-                    completed=actual_time,
-                    total=actual_time,
-                    time_display=f"[cyan]{actual_time}s[/cyan] / [cyan]{actual_time}s[/cyan]",
+                    completed=wall_time,
+                    total=wall_time,
+                    time_display=f"[cyan]{actual_time_str}[/cyan] / [cyan]{actual_time_str}[/cyan]",
                 )
+
+            # Mark overall progress as complete
+            total_elapsed = time.time() - overall_start_time
+            total_elapsed_str = _format_time_hhmmss(total_elapsed)
+            progress.update(
+                overall_task,
+                completed=total_elapsed,
+                total=total_elapsed,
+                time_display=f"[green]{total_elapsed_str}[/green] / [green]{total_elapsed_str}[/green]",
+            )
 
         return results
 
     def _run_single_test_with_progress(
-        self, test_config: dict, progress: Progress, task, runtime: int
+        self,
+        test_config: dict,
+        progress: Progress,
+        task,
+        runtime: int,
+        overall_task=None,
+        overall_start_time: float = 0,
+        estimated_total: float = 0,
     ) -> tuple[Optional[dict], float]:
         """Run a single FIO test with progress updates.
 
@@ -88,13 +147,20 @@ class BenchmarkExecutor:
             """Background thread to update progress bar"""
             while not stop_progress.is_set():
                 elapsed = time.time() - wall_start
-                elapsed_int = int(elapsed)
-                # Cap at runtime to avoid showing more than 100%
+                # Update individual test progress (cyan)
                 progress.update(
                     task,
                     completed=min(elapsed, runtime),
-                    time_display=f"[cyan]{elapsed_int}s[/cyan] / [cyan]~{runtime}s[/cyan]",
+                    time_display=f"[cyan]{_format_time_hhmmss(elapsed)}[/cyan] / [cyan]~{_format_time_hhmmss(runtime)}[/cyan]",
                 )
+                # Update overall progress (magenta)
+                if overall_task is not None:
+                    overall_elapsed = time.time() - overall_start_time
+                    progress.update(
+                        overall_task,
+                        completed=min(overall_elapsed, estimated_total),
+                        time_display=f"[magenta]{_format_time_hhmmss(overall_elapsed)}[/magenta] / [magenta]~{_format_time_hhmmss(estimated_total)}[/magenta]",
+                    )
                 stop_progress.wait(0.5)
 
         # Start progress updater thread
