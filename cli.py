@@ -119,6 +119,11 @@ def run(**kwargs):
         config_data["runtime"] = 15
         config_data["filesize"] = "1G"
 
+    # Test mode overrides (use shorter runtime and smaller filesize)
+    if kwargs["mode"] == "test":
+        config_data["runtime"] = 15
+        config_data["filesize"] = "1G"
+
     # Auto-detect individual mode
     if config_data["test_types"]:
         config_data["mode"] = Mode.INDIVIDUAL
@@ -341,6 +346,18 @@ def compare(**kwargs):
 @click.option("--detailed", is_flag=True, help="Show detailed statistics")
 @click.option("--trends", is_flag=True, help="Show performance trends over time")
 @click.option("--plots", is_flag=True, help="Generate visualization plots")
+@click.option(
+    "--plot-types",
+    "plot_types",
+    multiple=True,
+    type=click.Choice(["bar", "scatter", "radar", "line"]),
+    default=["bar", "scatter", "radar"],
+    help="Plot types to generate",
+)
+@click.option(
+    "--plot-output-dir", type=click.Path(), default="results/plots", help="Directory for plot files"
+)
+@click.option("--open-browser", is_flag=True, help="Open plots in browser after generation")
 @click.option("--export", type=click.Path(), help="Export analysis to file")
 def analyze(**kwargs):
     """Analyze historical benchmark data"""
@@ -377,13 +394,31 @@ def analyze(**kwargs):
     if kwargs["trends"]:
         console.print("\n[yellow]Trend analysis requires plot generation[/yellow]")
         if kwargs["plots"]:
-            plotter = create_plotter(["line"], results, {})
+            plotter = create_plotter(
+                ["line"], results, {"plot_output_dir": kwargs["plot_output_dir"]}
+            )
             plotter.generate()
 
     if kwargs["plots"]:
-        plotter = create_plotter(["bar", "scatter", "radar"], results, {})
+        plot_types = (
+            list(kwargs["plot_types"]) if kwargs["plot_types"] else ["bar", "scatter", "radar"]
+        )
+        plotter = create_plotter(
+            plot_types, results, {"plot_output_dir": kwargs["plot_output_dir"]}
+        )
         plotter.generate()
-        console.print("[green]Plots generated[/green]")
+
+        if kwargs["open_browser"]:
+            from glob import glob
+
+            for plot_file in glob(str(kwargs["plot_output_dir"]) + "/*.html"):
+                console.print(f"[green]Opening {plot_file} in browser...[/green]")
+                success = plotter.open_in_browser(plot_file)
+                if not success:
+                    console.print(f"[yellow]Browser open failed for {plot_file}[/yellow]")
+                    console.print(f"[dim]File saved at: {plot_file}[/dim]")
+
+        console.print(f"[green]Plots saved to {kwargs['plot_output_dir']}/[/green]")
 
     if kwargs["export"]:
         console.print(f"\n[yellow]Exporting analysis to {kwargs['export']}...[/yellow]")
