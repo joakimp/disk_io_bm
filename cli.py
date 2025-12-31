@@ -167,14 +167,21 @@ def run(**kwargs):
     # Store results
     if config.database != StorageBackend.NONE:
         storage = None
+        storage_path = ""
         if config.database == StorageBackend.SQLITE:
             storage = SQLiteStorage(config.db_path)
+            storage_path = config.db_path
         elif config.database == StorageBackend.JSON:
             storage = JsonStorage(config.results_dir)
+            storage_path = config.results_dir
         elif config.database == StorageBackend.CSV:
             storage = CsvStorage(config.results_dir)
+            storage_path = config.results_dir
         if storage:
             storage.save_results(results, config)
+            console.print(
+                f"[green]Results saved to {config.database.value}: {storage_path}[/green]"
+            )
 
     # Format and display output
     if config.output_format == "table":

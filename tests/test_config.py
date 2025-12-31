@@ -1,6 +1,5 @@
 """Tests for configuration management"""
 
-import pytest
 from src.config import BenchmarkConfig, Mode, StorageBackend
 
 

@@ -1,9 +1,7 @@
-"""Tests for CSV storage and formatters"""
+"""Tests for storage backends (SQLite, CSV, JSON)"""
 
 import pytest
-import os
-from pathlib import Path
-from src.storage import CsvStorage
+from src.storage import CsvStorage, SQLiteStorage, JsonStorage
 from src.formatters import CsvFormatter, ExcelFormatter
 from src.config import BenchmarkConfig, Mode
 
@@ -144,3 +142,103 @@ def test_excel_formatter_empty(tmp_dir):
         assert not output_file.exists()
     except ImportError:
         pytest.skip("openpyxl or pandas not available")
+
+
+# SQLite Storage Tests
+
+
+def test_sqlite_storage_creation(tmp_dir):
+    """Test SQLite storage creation and database initialization"""
+    db_path = tmp_dir / "test_benchmark.db"
+    storage = SQLiteStorage(str(db_path))
+    assert storage is not None
+    assert db_path.exists()
+
+
+def test_sqlite_storage_save_and_retrieve(sample_results, sample_config, tmp_dir):
+    """Test SQLite storage save and retrieval"""
+    db_path = tmp_dir / "test_benchmark.db"
+    storage = SQLiteStorage(str(db_path))
+
+    # Save results
+    storage.save_results(sample_results, sample_config)
+
+    # Retrieve results
+    history = storage.get_history(10)
+    assert len(history) == 2
+
+    # Check that data was saved correctly
+    assert any(r["test_type"] == "randread" for r in history)
+    assert any(r["test_type"] == "randwrite" for r in history)
+
+    # Check specific values
+    randread_result = next(r for r in history if r["test_type"] == "randread")
+    assert randread_result["block_size"] == "4k"
+    assert randread_result["read_iops"] == 15000.0
+    assert randread_result["status"] == "OK"
+
+
+def test_sqlite_storage_multiple_saves(sample_results, sample_config, tmp_dir):
+    """Test SQLite storage with multiple save operations"""
+    db_path = tmp_dir / "test_benchmark.db"
+    storage = SQLiteStorage(str(db_path))
+
+    # Save results twice
+    storage.save_results(sample_results, sample_config)
+    storage.save_results(sample_results, sample_config)
+
+    # Should have 4 records (2 results × 2 saves)
+    history = storage.get_history(10)
+    assert len(history) == 4
+
+
+def test_sqlite_storage_custom_query(sample_results, sample_config, tmp_dir):
+    """Test SQLite storage custom query"""
+    db_path = tmp_dir / "test_benchmark.db"
+    storage = SQLiteStorage(str(db_path))
+    storage.save_results(sample_results, sample_config)
+
+    # Query for specific test type
+    results = storage.custom_query("SELECT * FROM benchmarks WHERE test_type = ?", ("randread",))
+    assert len(results) == 1
+    assert results[0]["test_type"] == "randread"
+
+
+def test_sqlite_storage_empty_results(sample_config, tmp_dir):
+    """Test SQLite storage with empty results"""
+    db_path = tmp_dir / "test_benchmark.db"
+    storage = SQLiteStorage(str(db_path))
+    storage.save_results([], sample_config)
+
+    history = storage.get_history(10)
+    assert len(history) == 0
+
+
+# JSON Storage Tests
+
+
+def test_json_storage_creation(tmp_dir):
+    """Test JSON storage creation"""
+    storage = JsonStorage(str(tmp_dir))
+    assert storage is not None
+    assert tmp_dir.exists()
+
+
+def test_json_storage_save(sample_results, sample_config, tmp_dir):
+    """Test JSON storage save"""
+    storage = JsonStorage(str(tmp_dir))
+    storage.save_results(sample_results, sample_config)
+
+    # Check that JSON file was created
+    json_file = tmp_dir / "benchmark_results.json"
+    assert json_file.exists()
+
+    # Verify content
+    import json
+
+    with open(json_file, "r") as f:
+        data = json.load(f)
+
+    assert "timestamp" in data
+    assert "results" in data
+    assert len(data["results"]) == 2

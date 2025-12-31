@@ -1,7 +1,6 @@
 """Tests for plot generation"""
 
 import pytest
-import pandas as pd
 from src.plots import PlotlyPlotter
 
 
