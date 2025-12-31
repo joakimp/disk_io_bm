@@ -31,12 +31,17 @@ class CsvFormatter:
                     "Read Lat (us)",
                     "Write Lat (us)",
                     "CPU",
-                    "Runtime (s)",
+                    "I/O Time (s)",
+                    "Wall Time (s)",
                     "Status",
                 ]
             )
 
             for result in results:
+                # Support both old (runtime_sec) and new (io_time_sec) field names
+                io_time = result.get("io_time_sec") or result.get("runtime_sec") or 0
+                wall_time = result.get("wall_time_sec") or 0
+
                 writer.writerow(
                     [
                         result.get("test_type", "N/A"),
@@ -48,7 +53,8 @@ class CsvFormatter:
                         f"{(result.get('read_latency_us') or 0):.2f}",
                         f"{(result.get('write_latency_us') or 0):.2f}",
                         result.get("cpu", "N/A"),
-                        f"{(result.get('runtime_sec') or 0):.2f}",
+                        f"{io_time:.2f}",
+                        f"{wall_time:.2f}",
                         result.get("status", "N/A"),
                     ]
                 )
@@ -103,21 +109,28 @@ class ExcelFormatter:
             values=["read_latency_us", "write_latency_us"],
         )
 
-        raw_df = df[
-            [
-                "test_type",
-                "block_size",
-                "read_iops",
-                "write_iops",
-                "read_bw",
-                "write_bw",
-                "read_latency_us",
-                "write_latency_us",
-                "cpu",
-                "runtime_sec",
-                "status",
-            ]
+        # Support both old (runtime_sec) and new (io_time_sec, wall_time_sec) field names
+        raw_columns = [
+            "test_type",
+            "block_size",
+            "read_iops",
+            "write_iops",
+            "read_bw",
+            "write_bw",
+            "read_latency_us",
+            "write_latency_us",
+            "cpu",
         ]
+        # Add time columns based on what's available
+        if "io_time_sec" in df.columns:
+            raw_columns.append("io_time_sec")
+        elif "runtime_sec" in df.columns:
+            raw_columns.append("runtime_sec")
+        if "wall_time_sec" in df.columns:
+            raw_columns.append("wall_time_sec")
+        raw_columns.append("status")
+
+        raw_df = df[[col for col in raw_columns if col in df.columns]]
 
         with pd.ExcelWriter(
             self.output_path, engine="openpyxl", datetime_format="YYYY-MM-DD HH:MM:SS"

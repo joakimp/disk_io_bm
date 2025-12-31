@@ -403,16 +403,18 @@ Both tools save results to `results/` directory:
 **Table Output (default):**
 ```
 Disk I/O Benchmark Results
-┏━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┓
-┃ Test          ┃ IOPS Read ┃ IOPS Write ┃ BW Read     ┃ BW Write    ┃ Lat Avg Read (us) ┃ Lat Avg Write (us) ┃ CPU                   ┃ Runtime ┃
-┡━━━━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━┩
-│ randread 4k   │ 11800.0   │ N/A        │ 46.0MiB/s   │ N/A         │ 84.66             │ N/A                │ usr=0.69%, sys=8.50%  │ 15.0s   │
-│ randwrite 64k │ N/A       │ 29600.0    │ N/A         │ 1852.0MiB/s │ N/A               │ 32.72              │ usr=3.62%, sys=27.36% │ 0.6s    │
-│ read 1M       │ 2270.0    │ N/A        │ 2271.0MiB/s │ N/A         │ 439.24            │ N/A                │ usr=0.00%, sys=6.00%  │ 0.5s    │
-└───────────────┴───────────┴────────────┴─────────────┴─────────────┴───────────────────┴────────────────────┴───────────────────────┴─────────┘
-
+┏━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━┓
+┃ Test          ┃ IOPS Read ┃ IOPS Write ┃ BW Read     ┃ BW Write    ┃ Lat Avg Read (us) ┃ Lat Avg Write (us) ┃ CPU                   ┃ I/O Time┃ Wall Time ┃
+┡━━━━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━┩
+│ randread 4k   │ 11800.0   │ N/A        │ 46.0MiB/s   │ N/A         │ 84.66             │ N/A                │ usr=0.69%, sys=8.50%  │ 35ms    │ 10s       │
+│ randwrite 64k │ N/A       │ 29600.0    │ N/A         │ 1852.0MiB/s │ N/A               │ 32.72              │ usr=3.62%, sys=27.36% │ 55ms    │ 10s       │
+│ read 1M       │ 2270.0    │ N/A        │ 2271.0MiB/s │ N/A         │ 439.24            │ N/A                │ usr=0.00%, sys=6.00%  │ 9ms     │ 10s       │
+└───────────────┴───────────┴────────────┴─────────────┴─────────────┴───────────────────┴────────────────────┴───────────────────────┴─────────┴───────────┘
 ```
 
+**Time Columns:**
+- **I/O Time**: Actual FIO disk I/O operation duration (may be very short for fast disks with small files)
+- **Wall Time**: Total elapsed wall-clock time including file creation, setup, and cleanup
 
 **JSON Output:**
 ```json
@@ -427,7 +429,8 @@ Disk I/O Benchmark Results
     "read_latency_us": 50.0,
     "write_latency_us": 0,
     "cpu": "usr=10.0%, sys=5.0%",
-    "runtime_sec": 15.00,
+    "io_time_sec": 0.035,
+    "wall_time_sec": 10.25,
     "status": "OK"
   },
   ...
@@ -436,8 +439,8 @@ Disk I/O Benchmark Results
 
 **CSV Output:**
 ```csv
-Test Type,Block Size,Read IOPS,Write IOPS,Read MB/s,Write MB/s,Read Lat (us),Write Lat (us),CPU,Runtime (s),Status
-randread,4k,15000,0,58.50,0.00,50.00,0,usr=10.0% sys=5.0%,15.00,OK
+Test Type,Block Size,Read IOPS,Write IOPS,Read MB/s,Write MB/s,Read Lat (us),Write Lat (us),CPU,I/O Time (s),Wall Time (s),Status
+randread,4k,15000,0,58.50,0.00,50.00,0,usr=10.0% sys=5.0%,0.04,10.25,OK
 ...
 ```
 
@@ -575,13 +578,18 @@ CREATE TABLE benchmarks (
     write_latency_us REAL,
     cpu TEXT,
     status TEXT,
-    runtime_sec REAL,
+    io_time_sec REAL,      -- FIO disk I/O operation duration
+    wall_time_sec REAL,    -- Total wall-clock time including setup/teardown
     metadata TEXT
 );
 
 CREATE INDEX idx_timestamp ON benchmarks(timestamp);
 CREATE INDEX idx_test_type ON benchmarks(test_type);
 ```
+
+**Time Fields:**
+- `io_time_sec`: The actual FIO disk I/O operation time (what FIO reports as `job_runtime`)
+- `wall_time_sec`: Total elapsed wall-clock time including file creation, FIO execution, and cleanup
 
 ## Example Queries
 
@@ -598,8 +606,8 @@ uv run disk-benchmark-py run --query-sql "SELECT test_type, AVG(read_iops) as av
 # Compare two runs
 uv run disk-benchmark-py run --query-sql "SELECT * FROM benchmarks WHERE timestamp > datetime('now', '-7 days') ORDER BY timestamp DESC LIMIT 20"
 
-# Find slowest tests
-uv run disk-benchmark-py run --query-sql "SELECT test_type, block_size, runtime_sec FROM benchmarks ORDER BY runtime_sec DESC LIMIT 10"
+# Find tests with longest wall-clock time
+uv run disk-benchmark-py run --query-sql "SELECT test_type, block_size, io_time_sec, wall_time_sec FROM benchmarks ORDER BY wall_time_sec DESC LIMIT 10"
 ```
 
 ## macOS Support

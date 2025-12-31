@@ -25,22 +25,18 @@ class JsonStorage:
                 json_dir.mkdir(parents=True, exist_ok=True)
                 output_file = json_dir / f"{test_name}.json"
 
+                # Support both old (runtime_sec) and new (io_time_sec) field names
+                io_time = result.get("io_time_sec") or result.get("runtime_sec")
+                wall_time = result.get("wall_time_sec")
+
                 test_result = {
                     "timestamp": timestamp,
                     "test": result["test_type"],
                     "block_size": result["block_size"],
-                    "read_iops": result.get("read_iops")
-                    if result.get("read_iops")
-                    else "N/A",
-                    "write_iops": result.get("write_iops")
-                    if result.get("write_iops")
-                    else "N/A",
-                    "read_bw_mibs": result.get("read_bw")
-                    if result.get("read_bw")
-                    else "N/A",
-                    "write_bw_mibs": result.get("write_bw")
-                    if result.get("write_bw")
-                    else "N/A",
+                    "read_iops": result.get("read_iops") if result.get("read_iops") else "N/A",
+                    "write_iops": result.get("write_iops") if result.get("write_iops") else "N/A",
+                    "read_bw_mibs": result.get("read_bw") if result.get("read_bw") else "N/A",
+                    "write_bw_mibs": result.get("write_bw") if result.get("write_bw") else "N/A",
                     "read_latency_us": result.get("read_latency_us")
                     if result.get("read_latency_us")
                     else "N/A",
@@ -48,9 +44,8 @@ class JsonStorage:
                     if result.get("write_latency_us")
                     else "N/A",
                     "cpu": result.get("cpu") if result.get("cpu") else "N/A",
-                    "runtime_sec": result.get("runtime_sec")
-                    if result.get("runtime_sec")
-                    else "N/A",
+                    "io_time_sec": io_time if io_time else "N/A",
+                    "wall_time_sec": wall_time if wall_time else "N/A",
                 }
 
                 with open(output_file, "w") as f:

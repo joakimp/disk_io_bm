@@ -25,7 +25,7 @@ def mock_fio_json_output():
                             "system": 2.3,
                         },
                     },
-                    "runtime": 15023,
+                    "job_runtime": 15023,  # FIO reports job runtime in milliseconds
                 }
             ]
         }
@@ -112,7 +112,7 @@ def test_parse_fio_json_output(mock_fio_json_output):
     assert abs(result["read_latency_us"] - 50.0) < 1
     assert result["write_latency_us"] == 0
     assert "usr=5.5%" in result["cpu"]
-    assert result["runtime_sec"] == 15.023
+    assert result["io_time_sec"] == 15.023
 
 
 def test_convert_latency():

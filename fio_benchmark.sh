@@ -212,6 +212,9 @@ do_disk_test () {
 
 	current_test=$((current_test + 1))
 
+	# Record wall-clock start time
+	local test_start_time=$(date +%s)
+
 	# Parse TESTTYPE for rw and extra params
 	local rw_part
 	local extra
@@ -288,6 +291,15 @@ do_disk_test () {
 	# Clear progress line from terminal
 	printf "\r%-${width}s" "                                                                                                                                    " >&2
 	echo "" >&2
+
+	# Record wall-clock end time and calculate duration
+	local test_end_time=$(date +%s)
+	local wall_clock_duration=$((test_end_time - test_start_time))
+
+	# Append wall-clock duration to output file
+	echo "" >> "${OFNAME}"
+	echo "Wall-clock duration: ${wall_clock_duration}s" >> "${OFNAME}"
+
 	rm -f ${TMPFILE}
 }
 
@@ -296,7 +308,7 @@ summarize_results() {
     echo "Generating summary..." >&2
 
     local data=()
-    data+=("Test|IOPS Read|IOPS Write|BW Read|BW Write|Lat Avg Read (us)|Lat Avg Write (us)|CPU|Runtime|Status")
+    data+=("Test|IOPS Read|IOPS Write|BW Read|BW Write|Lat Avg Read (us)|Lat Avg Write (us)|CPU|I/O Time|Wall Time|Status")
 
     # Get all benchmark files once to avoid duplicate processing
     local files=($(find "${RESULTS_DIR}" -maxdepth 1 -type f \( -name "bm_*.txt" -o -name "bm_*_individual.txt" \)))
@@ -337,7 +349,8 @@ summarize_results() {
             local read_lat="N/A"
             local write_lat="N/A"
             local cpu="N/A"
-            local runtime="N/A"
+            local io_time="N/A"
+            local wall_time="N/A"
             local status="OK"
 
             # Check if test was skipped (TRIM on regular file)
@@ -346,7 +359,8 @@ summarize_results() {
                 local skip_reason=$(grep "SKIPPED:" "$file" | sed 's/SKIPPED: //' | head -1)
                 # For skipped tests, show reason in status column
                 status="$skip_reason"
-                runtime="N/A"
+                io_time="N/A"
+                wall_time="N/A"
                 cpu="N/A"
             # Check if test failed (FIO error)
             elif grep -q "err=[0-9]" "$file" && ! grep -q "err= 0:" "$file"; then
@@ -356,17 +370,37 @@ summarize_results() {
             fi
 
             if [ "$test_type" != "trim" ]; then
-                # Extract runtime (format: run=300098-300098msec)
-                local test_runtime_ms=$(grep -A 50 "This is $test_type" "$file" | grep "run=" | head -1 | sed 's/.*run=\([0-9]*\)-[0-9]*msec.*/\1/')
-                if [ -n "$test_runtime_ms" ]; then
-                    local runtime_sec=$((test_runtime_ms / 1000))
-                    local hours=$((runtime_sec / 3600))
-                    local minutes=$(((runtime_sec % 3600) / 60))
-                    local seconds=$((runtime_sec % 60))
-                    if [ $hours -gt 0 ]; then
-                        runtime=$(printf "%02d:%02d:%02d" $hours $minutes $seconds)
+                # Extract I/O time (format: run=300098-300098msec)
+                local test_io_time_ms=$(grep -A 50 "This is $test_type" "$file" | grep "run=" | head -1 | sed 's/.*run=\([0-9]*\)-[0-9]*msec.*/\1/')
+                if [ -n "$test_io_time_ms" ] && [ "$test_io_time_ms" -gt 0 ]; then
+                    if [ "$test_io_time_ms" -lt 1000 ]; then
+                        # Sub-second I/O time, display in milliseconds
+                        io_time="${test_io_time_ms}ms"
                     else
-                        runtime=$(printf "%02d:%02d" $minutes $seconds)
+                        local io_time_sec=$((test_io_time_ms / 1000))
+                        local hours=$((io_time_sec / 3600))
+                        local minutes=$(((io_time_sec % 3600) / 60))
+                        local seconds=$((io_time_sec % 60))
+                        if [ $hours -gt 0 ]; then
+                            io_time=$(printf "%02d:%02d:%02d" $hours $minutes $seconds)
+                        else
+                            io_time=$(printf "%02d:%02d" $minutes $seconds)
+                        fi
+                    fi
+                fi
+
+                # Extract wall-clock duration
+                local test_wall_time=$(grep -A 60 "This is $test_type" "$file" | grep "Wall-clock duration:" | head -1 | sed 's/.*Wall-clock duration: \([0-9]*\)s.*/\1/')
+                if [ -n "$test_wall_time" ] && [ "$test_wall_time" -gt 0 ]; then
+                    local hours=$((test_wall_time / 3600))
+                    local minutes=$(((test_wall_time % 3600) / 60))
+                    local seconds=$((test_wall_time % 60))
+                    if [ $hours -gt 0 ]; then
+                        wall_time=$(printf "%02d:%02d:%02d" $hours $minutes $seconds)
+                    elif [ $minutes -gt 0 ]; then
+                        wall_time=$(printf "%02d:%02d" $minutes $seconds)
+                    else
+                        wall_time="${seconds}s"
                     fi
                 fi
 
@@ -405,19 +439,40 @@ summarize_results() {
                 # Extract CPU
                 cpu=$(grep -A 50 "This is $test_type" "$file" | grep "cpu" -A 1 | grep "usr=" | head -1 | sed 's/.*usr=\([0-9.]*%\), sys=\([0-9.]*%\).*/usr=\1 sys=\2/')
             elif [ "$status" = "OK" ]; then
-                # TRIM test completed successfully - extract CPU and runtime
-                local test_runtime_ms=$(grep -A 50 "This is $test_type" "$file" | grep "run=" | head -1 | sed 's/.*run=\([0-9]*\)-[0-9]*msec.*/\1/')
-                if [ -n "$test_runtime_ms" ]; then
-                    local runtime_sec=$((test_runtime_ms / 1000))
-                    local hours=$((runtime_sec / 3600))
-                    local minutes=$(((runtime_sec % 3600) / 60))
-                    local seconds=$((runtime_sec % 60))
-                    if [ $hours -gt 0 ]; then
-                        runtime=$(printf "%02d:%02d:%02d" $hours $minutes $seconds)
+                # TRIM test completed successfully - extract CPU and I/O time
+                local test_io_time_ms=$(grep -A 50 "This is $test_type" "$file" | grep "run=" | head -1 | sed 's/.*run=\([0-9]*\)-[0-9]*msec.*/\1/')
+                if [ -n "$test_io_time_ms" ] && [ "$test_io_time_ms" -gt 0 ]; then
+                    if [ "$test_io_time_ms" -lt 1000 ]; then
+                        # Sub-second I/O time, display in milliseconds
+                        io_time="${test_io_time_ms}ms"
                     else
-                        runtime=$(printf "%02d:%02d" $minutes $seconds)
+                        local io_time_sec=$((test_io_time_ms / 1000))
+                        local hours=$((io_time_sec / 3600))
+                        local minutes=$(((io_time_sec % 3600) / 60))
+                        local seconds=$((io_time_sec % 60))
+                        if [ $hours -gt 0 ]; then
+                            io_time=$(printf "%02d:%02d:%02d" $hours $minutes $seconds)
+                        else
+                            io_time=$(printf "%02d:%02d" $minutes $seconds)
+                        fi
                     fi
                 fi
+
+                # Extract wall-clock duration for TRIM
+                local test_wall_time=$(grep -A 60 "This is $test_type" "$file" | grep "Wall-clock duration:" | head -1 | sed 's/.*Wall-clock duration: \([0-9]*\)s.*/\1/')
+                if [ -n "$test_wall_time" ] && [ "$test_wall_time" -gt 0 ]; then
+                    local hours=$((test_wall_time / 3600))
+                    local minutes=$(((test_wall_time % 3600) / 60))
+                    local seconds=$((test_wall_time % 60))
+                    if [ $hours -gt 0 ]; then
+                        wall_time=$(printf "%02d:%02d:%02d" $hours $minutes $seconds)
+                    elif [ $minutes -gt 0 ]; then
+                        wall_time=$(printf "%02d:%02d" $minutes $seconds)
+                    else
+                        wall_time="${seconds}s"
+                    fi
+                fi
+
                 # Extract CPU for TRIM
                 cpu=$(grep -A 50 "This is $test_type" "$file" | grep "cpu" -A 1 | grep "usr=" | head -1 | sed 's/.*usr=\([0-9.]*%\), sys=\([0-9.]*%\).*/usr=\1 sys=\2/')
             fi
@@ -429,10 +484,11 @@ summarize_results() {
             [ -z "$read_lat" ] && read_lat="N/A"
             [ -z "$write_lat" ] && write_lat="N/A"
             [ -z "$cpu" ] && cpu="N/A"
-            [ -z "$runtime" ] && runtime="N/A"
+            [ -z "$io_time" ] && io_time="N/A"
+            [ -z "$wall_time" ] && wall_time="N/A"
             [ -z "$status" ] && status="N/A"
 
-            data+=("$test|$read_iops|$write_iops|$read_bw|$write_bw|$read_lat|$write_lat|$cpu|$runtime|$status")
+            data+=("$test|$read_iops|$write_iops|$read_bw|$write_bw|$read_lat|$write_lat|$cpu|$io_time|$wall_time|$status")
         done
     done
 
@@ -444,35 +500,63 @@ summarize_results() {
     echo "$table"
     echo "$table" > "$summary_file"
 
-    # Calculate total runtime from all test files
-    local total_runtime_seconds=0
+    # Calculate total I/O time from all test files (in milliseconds)
+    local total_io_time_ms=0
+    local total_wall_time_sec=0
     local files=($(find "${RESULTS_DIR}" -maxdepth 1 -type f \( -name "bm_*.txt" -o -name "bm_*_individual.txt" \)))
     for file in "${files[@]}"; do
         [ -f "$file" ] || continue
-        local test_runtime_ms=$(grep "run=" "$file" | head -1 | sed 's/.*run=\([0-9]*\)-[0-9]*msec.*/\1/')
-        if [ -n "$test_runtime_ms" ]; then
-            total_runtime_seconds=$((total_runtime_seconds + test_runtime_ms / 1000))
-        fi
+        # Sum all run= values in the file (each test section has one)
+        while read -r io_time_val; do
+            if [ -n "$io_time_val" ] && [ "$io_time_val" -gt 0 ] 2>/dev/null; then
+                total_io_time_ms=$((total_io_time_ms + io_time_val))
+            fi
+        done < <(grep "run=" "$file" | sed 's/.*run=\([0-9]*\)-[0-9]*msec.*/\1/')
+        # Sum all wall-clock durations
+        while read -r wall_time_val; do
+            if [ -n "$wall_time_val" ] && [ "$wall_time_val" -gt 0 ] 2>/dev/null; then
+                total_wall_time_sec=$((total_wall_time_sec + wall_time_val))
+            fi
+        done < <(grep "Wall-clock duration:" "$file" | sed 's/.*Wall-clock duration: \([0-9]*\)s.*/\1/')
     done
 
-    # Format total runtime
-    local total_hours=$((total_runtime_seconds / 3600))
-    local total_minutes=$(((total_runtime_seconds % 3600) / 60))
-    local total_seconds=$((total_runtime_seconds % 60))
-    local total_display
-    if [ $total_hours -gt 0 ]; then
-        total_display=$(printf "%02d:%02d:%02d" $total_hours $total_minutes $total_seconds)
+    # Format total I/O time
+    local total_io_display
+    if [ "$total_io_time_ms" -lt 1000 ]; then
+        total_io_display="${total_io_time_ms}ms"
     else
-        total_display=$(printf "%02d:%02d" $total_minutes $total_seconds)
+        local total_io_seconds=$((total_io_time_ms / 1000))
+        local io_hours=$((total_io_seconds / 3600))
+        local io_minutes=$(((total_io_seconds % 3600) / 60))
+        local io_seconds=$((total_io_seconds % 60))
+        if [ $io_hours -gt 0 ]; then
+            total_io_display=$(printf "%02d:%02d:%02d" $io_hours $io_minutes $io_seconds)
+        else
+            total_io_display=$(printf "%02d:%02d" $io_minutes $io_seconds)
+        fi
     fi
 
-    # Add timestamp, total runtime, and note to summary
+    # Format total wall time
+    local total_wall_display
+    local wall_hours=$((total_wall_time_sec / 3600))
+    local wall_minutes=$(((total_wall_time_sec % 3600) / 60))
+    local wall_seconds=$((total_wall_time_sec % 60))
+    if [ $wall_hours -gt 0 ]; then
+        total_wall_display=$(printf "%02d:%02d:%02d" $wall_hours $wall_minutes $wall_seconds)
+    elif [ $wall_minutes -gt 0 ]; then
+        total_wall_display=$(printf "%02d:%02d" $wall_minutes $wall_seconds)
+    else
+        total_wall_display="${wall_seconds}s"
+    fi
+
+    # Add timestamp, total runtimes, and note to summary
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     echo "" | tee -a "$summary_file"
     echo "Test completed: $timestamp" | tee -a "$summary_file"
-    echo "Total runtime: $total_display" | tee -a "$summary_file"
+    echo "Total I/O time: $total_io_display (actual disk I/O operations)" | tee -a "$summary_file"
+    echo "Total wall time: $total_wall_display (including setup/teardown)" | tee -a "$summary_file"
     echo "" | tee -a "$summary_file"
-    echo "Note: Runtime values are approximate estimates. Actual times may vary based on disk performance and system load." | tee -a "$summary_file"
+    echo "Note: I/O Time = FIO disk operation duration. Wall Time = total elapsed time including file creation and cleanup." | tee -a "$summary_file"
 
     echo "Summary saved to $summary_file" >&2
 }

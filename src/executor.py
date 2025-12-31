@@ -4,6 +4,7 @@ import json
 import subprocess
 import tempfile
 import platform
+import time
 from pathlib import Path
 from typing import List, Optional
 
@@ -112,6 +113,9 @@ class BenchmarkExecutor:
         """Run a single FIO test"""
         test_file = self.temp_dir / f"test_{test_config['test_type']}_{test_config['block_size']}"
 
+        # Record wall-clock start time
+        wall_start = time.time()
+
         try:
             cmd = self._build_fio_command(test_config, test_file)
             self.console.print(f"[dim]Running: {' '.join(cmd)}[/dim]")
@@ -123,10 +127,14 @@ class BenchmarkExecutor:
                 timeout=self.config.runtime + 60,
             )
 
+            # Calculate wall-clock duration
+            wall_time_sec = round(time.time() - wall_start, 2)
+
             if result.returncode == 0:
                 parsed = self._parse_fio_json_output(result.stdout, test_config, allow_empty=True)
                 parsed["status"] = "OK"
                 parsed["output_file"] = str(test_file)
+                parsed["wall_time_sec"] = wall_time_sec
                 return parsed
             else:
                 json_data = self._parse_fio_json_output(
@@ -137,11 +145,12 @@ class BenchmarkExecutor:
                     or json_data.get("write_iops", 0) > 0
                     or json_data.get("read_bw", 0) > 0
                     or json_data.get("write_bw", 0) > 0
-                    or json_data.get("runtime_sec", 0) > 0
+                    or json_data.get("io_time_sec", 0) > 0
                 )
 
                 if is_valid_benchmark:
                     json_data["status"] = "OK"
+                    json_data["wall_time_sec"] = wall_time_sec
                     return json_data
                 else:
                     stderr_msg = result.stderr.strip() if result.stderr else "unknown error"
@@ -157,10 +166,12 @@ class BenchmarkExecutor:
                         "read_latency_us": 0,
                         "write_latency_us": 0,
                         "cpu": "N/A",
-                        "runtime_sec": 0,
+                        "io_time_sec": 0,
+                        "wall_time_sec": wall_time_sec,
                     }
 
         except subprocess.TimeoutExpired:
+            wall_time_sec = round(time.time() - wall_start, 2)
             self.console.print(f"[red]Test timed out: {test_config['test_type']}[/red]")
             return {
                 "test_type": test_config["test_type"],
@@ -173,9 +184,11 @@ class BenchmarkExecutor:
                 "read_latency_us": 0,
                 "write_latency_us": 0,
                 "cpu": "N/A",
-                "runtime_sec": 0,
+                "io_time_sec": 0,
+                "wall_time_sec": wall_time_sec,
             }
         except Exception as e:
+            wall_time_sec = round(time.time() - wall_start, 2)
             self.console.print(f"[red]Error running test: {e}[/red]")
             return {
                 "test_type": test_config["test_type"],
@@ -188,7 +201,8 @@ class BenchmarkExecutor:
                 "read_latency_us": 0,
                 "write_latency_us": 0,
                 "cpu": "N/A",
-                "runtime_sec": 0,
+                "io_time_sec": 0,
+                "wall_time_sec": wall_time_sec,
             }
         finally:
             if test_file.exists():
@@ -287,7 +301,7 @@ class BenchmarkExecutor:
                     write.get("lat_ns", {}).get("mean", 0) if write else 0
                 ),
                 "cpu": self._extract_cpu(job.get("job_options", {})),
-                "runtime_sec": job.get("runtime", 0) / 1000,
+                "io_time_sec": job.get("job_runtime", 0) / 1000,
             }
         except json.JSONDecodeError:
             self.console.print("[red]Failed to parse FIO JSON output[/red]")
@@ -319,5 +333,6 @@ class BenchmarkExecutor:
             "read_latency_us": 0,
             "write_latency_us": 0,
             "cpu": "N/A",
-            "runtime_sec": 0,
+            "io_time_sec": 0,
+            "wall_time_sec": 0,
         }

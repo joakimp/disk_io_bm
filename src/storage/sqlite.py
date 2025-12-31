@@ -34,7 +34,8 @@ class SQLiteStorage:
                     write_latency_us REAL,
                     cpu TEXT,
                     status TEXT,
-                    runtime_sec REAL,
+                    io_time_sec REAL,
+                    wall_time_sec REAL,
                     metadata TEXT
                 )
             """)
@@ -44,6 +45,22 @@ class SQLiteStorage:
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_test_type ON benchmarks(test_type)
             """)
+            # Migration: Add new columns if they don't exist (for existing databases)
+            try:
+                conn.execute("ALTER TABLE benchmarks ADD COLUMN io_time_sec REAL DEFAULT 0")
+            except sqlite3.OperationalError:
+                pass  # Column already exists
+            try:
+                conn.execute("ALTER TABLE benchmarks ADD COLUMN wall_time_sec REAL DEFAULT 0")
+            except sqlite3.OperationalError:
+                pass  # Column already exists
+            # Migration: Copy runtime_sec to io_time_sec if runtime_sec exists
+            try:
+                conn.execute(
+                    "UPDATE benchmarks SET io_time_sec = runtime_sec WHERE io_time_sec IS NULL OR io_time_sec = 0"
+                )
+            except sqlite3.OperationalError:
+                pass  # runtime_sec column doesn't exist
             conn.commit()
 
     def save_results(self, results: List[dict], config) -> None:
@@ -55,8 +72,9 @@ class SQLiteStorage:
                     INSERT INTO benchmarks (
                         mode, filesize, runtime, test_type, block_size,
                         read_iops, write_iops, read_bw, write_bw,
-                        read_latency_us, write_latency_us, cpu, status, runtime_sec, metadata
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        read_latency_us, write_latency_us, cpu, status,
+                        io_time_sec, wall_time_sec, metadata
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                     (
                         config.mode.value if hasattr(config.mode, "value") else str(config.mode),
@@ -72,7 +90,8 @@ class SQLiteStorage:
                         result.get("write_latency_us", 0),
                         result.get("cpu", ""),
                         result.get("status", ""),
-                        result.get("runtime_sec", 0),
+                        result.get("io_time_sec", 0),
+                        result.get("wall_time_sec", 0),
                         json.dumps(result),
                     ),
                 )
@@ -193,7 +212,8 @@ class SQLiteStorage:
                     "read_latency_us",
                     "write_latency_us",
                     "cpu",
-                    "runtime_sec",
+                    "io_time_sec",
+                    "wall_time_sec",
                     "status",
                 ]
             ]

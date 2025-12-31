@@ -42,12 +42,17 @@ class CsvStorage:
                     "Read Lat (us)",
                     "Write Lat (us)",
                     "CPU",
-                    "Runtime (s)",
+                    "I/O Time (s)",
+                    "Wall Time (s)",
                     "Status",
                 ]
             )
 
             for result in results:
+                # Support both old (runtime_sec) and new (io_time_sec) field names
+                io_time = result.get("io_time_sec") or result.get("runtime_sec") or 0
+                wall_time = result.get("wall_time_sec") or 0
+
                 writer.writerow(
                     [
                         result.get("test_type", "N/A"),
@@ -59,7 +64,8 @@ class CsvStorage:
                         f"{(result.get('read_latency_us') or 0):.2f}",
                         f"{(result.get('write_latency_us') or 0):.2f}",
                         result.get("cpu", "N/A"),
-                        f"{(result.get('runtime_sec') or 0):.2f}",
+                        f"{io_time:.2f}",
+                        f"{wall_time:.2f}",
                         result.get("status", "N/A"),
                     ]
                 )

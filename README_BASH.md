@@ -187,11 +187,21 @@ All results are saved to the `results/` directory:
 After running tests, the script automatically generates a summary of core metrics:
 
 ```
-Test          IOPS Read  IOPS Write  BW Read    BW Write   Lat Avg Read (us)  Lat Avg Write (us)  CPU
-randread 4k   15000      N/A         58.5MB/s   N/A        50.0               N/A                 usr=10.0% sys=5.0%
-randwrite 64k N/A        12000       N/A        46.7MB/s   N/A        70.0               usr=12.0% sys=6.0%
+Test          IOPS Read  IOPS Write  BW Read    BW Write   Lat Avg Read (us)  Lat Avg Write (us)  CPU                    I/O Time  Wall Time  Status
+randread 4k   15000      N/A         58.5MB/s   N/A        50.0               N/A                 usr=10.0% sys=5.0%     35ms      10s        OK
+randwrite 64k N/A        12000       N/A        46.7MB/s   N/A                70.0                usr=12.0% sys=6.0%     55ms      10s        OK
 ...
+
+Test completed: 2025-12-31 00:34:01
+Total I/O time: 108ms (actual disk I/O operations)
+Total wall time: 30s (including setup/teardown)
+
+Note: I/O Time = FIO disk operation duration. Wall Time = total elapsed time including file creation and cleanup.
 ```
+
+**Time Columns:**
+- **I/O Time**: Actual FIO disk I/O operation duration (may be very short for fast disks with small files)
+- **Wall Time**: Total elapsed wall-clock time including file creation, FIO execution, and cleanup
 
 The summary is displayed on the console and saved to `results/summary.txt`.
 

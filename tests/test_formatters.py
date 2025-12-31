@@ -17,7 +17,7 @@ def test_table_formatter_empty_results():
 
 def test_table_formatter_with_results():
     """Test table formatter with sample results"""
-    console = Console(file=StringIO())
+    console = Console(file=StringIO(), width=200)  # Wider console to avoid truncation
     formatter = TableFormatter(console)
     results = [
         {
@@ -30,7 +30,8 @@ def test_table_formatter_with_results():
             "read_latency_us": 50.0,
             "write_latency_us": 0,
             "cpu": "usr=5.5%, sys=2.3%",
-            "runtime_sec": 15.0,
+            "io_time_sec": 15.0,
+            "wall_time_sec": 16.5,
             "status": "OK",
         }
     ]
@@ -38,13 +39,13 @@ def test_table_formatter_with_results():
     output = console.file.getvalue()
     assert "read" in output.lower()
     assert "4k" in output
-    assert "10000" in output or "100" in output
+    assert "10000" in output or "10001" in output  # IOPS value
     assert "OK" in output
 
 
 def test_table_formatter_with_failed_result():
     """Test table formatter with failed result"""
-    console = Console(file=StringIO())
+    console = Console(file=StringIO(), width=200)  # Wider console to avoid truncation
     formatter = TableFormatter(console)
     results = [
         {
@@ -57,10 +58,11 @@ def test_table_formatter_with_failed_result():
             "read_latency_us": 0,
             "write_latency_us": 0,
             "cpu": "N/A",
-            "runtime_sec": 0,
+            "io_time_sec": 0,
+            "wall_time_sec": 0,
             "status": "FAILED: requires block device",
         }
     ]
     formatter.format(results)
     output = console.file.getvalue()
-    assert "FAILED" in output or "FAI" in output
+    assert "FAILED" in output
