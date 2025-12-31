@@ -45,9 +45,7 @@ class BenchmarkExecutor:
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
             TaskProgressColumn(),
-            TextColumn(
-                "[cyan]{task.fields[elapsed]:.0f}s[/cyan] / [cyan]{task.fields[total_time]}s[/cyan]"
-            ),
+            TextColumn("{task.fields[time_display]}"),
             console=self.console,
             refresh_per_second=2,
         ) as progress:
@@ -56,23 +54,34 @@ class BenchmarkExecutor:
                 task = progress.add_task(
                     description,
                     total=runtime,
-                    elapsed=0,
-                    total_time=runtime,
+                    time_display=f"[cyan]0s[/cyan] / [cyan]~{runtime}s[/cyan]",
                 )
 
-                result = self._run_single_test_with_progress(test_config, progress, task, runtime)
+                result, wall_time = self._run_single_test_with_progress(
+                    test_config, progress, task, runtime
+                )
                 if result:
                     results.append(result)
 
-                # Mark task as complete
-                progress.update(task, completed=runtime, elapsed=runtime)
+                # Update to show actual wall time when complete
+                actual_time = int(wall_time)
+                progress.update(
+                    task,
+                    completed=actual_time,
+                    total=actual_time,
+                    time_display=f"[cyan]{actual_time}s[/cyan] / [cyan]{actual_time}s[/cyan]",
+                )
 
         return results
 
     def _run_single_test_with_progress(
         self, test_config: dict, progress: Progress, task, runtime: int
-    ) -> Optional[dict]:
-        """Run a single FIO test with progress updates"""
+    ) -> tuple[Optional[dict], float]:
+        """Run a single FIO test with progress updates.
+
+        Returns:
+            Tuple of (result dict or None, wall_time in seconds)
+        """
         test_file = self.temp_dir / f"test_{test_config['test_type']}_{test_config['block_size']}"
         wall_start = time.time()
         stop_progress = threading.Event()
@@ -81,8 +90,13 @@ class BenchmarkExecutor:
             """Background thread to update progress bar"""
             while not stop_progress.is_set():
                 elapsed = time.time() - wall_start
+                elapsed_int = int(elapsed)
                 # Cap at runtime to avoid showing more than 100%
-                progress.update(task, completed=min(elapsed, runtime), elapsed=elapsed)
+                progress.update(
+                    task,
+                    completed=min(elapsed, runtime),
+                    time_display=f"[cyan]{elapsed_int}s[/cyan] / [cyan]~{runtime}s[/cyan]",
+                )
                 stop_progress.wait(0.5)
 
         # Start progress updater thread
@@ -107,7 +121,7 @@ class BenchmarkExecutor:
                 parsed["status"] = "OK"
                 parsed["output_file"] = str(test_file)
                 parsed["wall_time_sec"] = wall_time_sec
-                return parsed
+                return parsed, wall_time_sec
             else:
                 json_data = self._parse_fio_json_output(
                     result.stdout, test_config, allow_empty=True
@@ -123,7 +137,7 @@ class BenchmarkExecutor:
                 if is_valid_benchmark:
                     json_data["status"] = "OK"
                     json_data["wall_time_sec"] = wall_time_sec
-                    return json_data
+                    return json_data, wall_time_sec
                 else:
                     stderr_msg = result.stderr.strip() if result.stderr else "unknown error"
                     self.console.print(f"[red]FIO test failed: {stderr_msg}[/red]")
@@ -140,7 +154,7 @@ class BenchmarkExecutor:
                         "cpu": "N/A",
                         "io_time_sec": 0,
                         "wall_time_sec": wall_time_sec,
-                    }
+                    }, wall_time_sec
 
         except subprocess.TimeoutExpired:
             wall_time_sec = round(time.time() - wall_start, 2)
@@ -158,7 +172,7 @@ class BenchmarkExecutor:
                 "cpu": "N/A",
                 "io_time_sec": 0,
                 "wall_time_sec": wall_time_sec,
-            }
+            }, wall_time_sec
         except Exception as e:
             wall_time_sec = round(time.time() - wall_start, 2)
             self.console.print(f"[red]Error running test: {e}[/red]")
@@ -175,7 +189,7 @@ class BenchmarkExecutor:
                 "cpu": "N/A",
                 "io_time_sec": 0,
                 "wall_time_sec": wall_time_sec,
-            }
+            }, wall_time_sec
         finally:
             # Stop progress thread
             stop_progress.set()
